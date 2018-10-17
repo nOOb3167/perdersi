@@ -86,12 +86,21 @@ def _get_object(client, objhex):
     objloose = rv.data
     return objloose
 
-def _get_trees(repoctx, client, tree_hex):
-    # FIXME: just use repoctx.repo.odb
-    loosedir = str(_repodir_get_loosedir(repoctx.repodir))
-    loosedb = gitdb_db_loose_LooseObjectDB(loosedir)
-    treehexlist = _tree_recurse_0(client, repoctx, loosedb, tree_hex)
-    return treehexlist
+def _get_trees(client, loosedb, tree_hex):
+    treeloose = _get_object(client, tree_hex)
+    _loosedb_raw_object_write(loosedb, tree_hex, treeloose)
+    treestream = loosedb.stream(_hex2bin(tree_hex))
+    out = [tree_hex]
+    for treehex in _tree_stream_entry_filter(treestream, lambda filemode: filemode == PS_GIT_FILEMODE_TREE):
+        out.extend(_get_trees(client, loosedb, treehex))
+    return out
+
+def _tree_stream_entry_filter(treestream, predicate):
+    # predicate: func(git filemode : int)
+    # entries: [(binsha : bytes, git filemode : int, filename : str), ...]
+    #   (git filemodes: PS_GIT_FILEMODE_???)
+    entries = git_objects_fun_tree_entries_from_data(treestream.read())
+    return [_bin2hex(x[0]) for x in entries if predicate(x[1])]
 
 def _loosedb_raw_object_write(loosedb, presumedhex, objloose):
     assert not loosedb.has_object(_hex2bin(presumedhex))
@@ -108,19 +117,6 @@ def _repodir_get_loosedir(repodir):
     loosedir = repodir.join(".git/objects")
     assert os_path_isdir(str(loosedir))
     return loosedir
-
-def _tree_recurse_0(client, repo, loosedb, tree_hex):
-    treeloose = _get_object(client, tree_hex)
-    _loosedb_raw_object_write(loosedb, tree_hex, treeloose)
-    stream = loosedb.stream(_hex2bin(tree_hex))
-    stream_data = stream.read()
-    # entries: [(binsha : bytes, git filemode : int, filename : str), ...]
-    entries = git_objects_fun_tree_entries_from_data(stream_data)
-    treehexs = [_bin2hex(x[0]) for x in entries if x[1] == PS_GIT_FILEMODE_TREE]
-    out = [tree_hex]
-    for x in treehexs:
-        out.extend(_tree_recurse_0(client, repo, loosedb, x))
-    return out
 
 def test_monkeypatch_must_be_first(monkeypatch_server_repo_dir):
     pass
@@ -139,6 +135,17 @@ def test_get_head_object(repoctx_s, client):
 
 def test_get_head_trees(repoctx_s, repoctx, client):
     master_tree_hex = _get_master_tree_hex(client)
-    treehexlist = _get_trees(repoctx, client, master_tree_hex)
+    loosedb = repoctx.repo.odb
+    treehexlist = _get_trees(client, loosedb, master_tree_hex)
     assert len(treehexlist) == 2
-    
+    for treehex in treehexlist:
+        assert loosedb.has_object(_hex2bin(treehex))
+
+def test_get_head_blobs(repoctx_s, repoctx, client):
+    master_tree_hex = _get_master_tree_hex(client)
+    for treehex in _get_trees(client, repoctx.repo.odb, master_tree_hex):
+        bloblist = _tree_stream_entry_filter(
+            treestream,
+            lambda filemode: \
+                filemode == PS_GIT_FILEMODE_BLOB or \
+                filemode == PS_GIT_FILEMODE_BLOB_EXECUTABLE)
