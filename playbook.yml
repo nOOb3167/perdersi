@@ -1,0 +1,30 @@
+- name: Hello Play
+  hosts: perdersi
+  remote_user: root
+  become: yes
+
+  vars:
+    ansible_python_interpreter: python3
+
+  tasks:
+  - name: Distro Check
+    fail:
+      msg: 'Not fedora'
+    when: ansible_facts['distribution'] != 'Fedora'
+  - name: Packages
+    dnf:
+      name: ['python3', 'python3-libselinux', 'python3-virtualenv']
+  - name: Venv
+    block:
+      - name: Venv Path
+        file:
+          path: /usr/local/perdersi
+          state: directory
+      - name: Venv Req
+        copy: content="Flask>=1.0\nrequests2\npytest\nGitPython"
+          dest=/usr/local/perdersi/requirements.txt
+      - name: Venv Create
+        pip:
+          requirements: /usr/local/perdersi/requirements.txt
+          virtualenv: /usr/local/perdersi/venv
+          virtualenv_command: virtualenv-3
