@@ -15,6 +15,7 @@ from werkzeug.wsgi import (wrap_file as werkzeug_wsgi_wrap_file)
 # http://flask.pocoo.org/docs/1.0/api/#flask.Flask.teardown_appcontext
 # https://github.com/pytest-dev/pytest/issues/2508  # fixture finalizers
 # https://stackoverflow.com/questions/6624453/whats-the-correct-way-to-convert-bytes-to-a-hex-string-in-python-3/36149089#36149089
+# https://stackoverflow.com/questions/13317536/get-a-list-of-all-routes-defined-in-the-app/13318415#13318415
 
 class CsrfExc(Exception):
         pass
@@ -33,13 +34,13 @@ if not SERVER_CONFIG_PROD:
     SERVER_ORIGIN_DOMAIN_APP = "localhost.localdomain"
     SERVER_ORIGIN_DOMAIN_API = "api.localhost.localdomain"
     SERVER_REPO_DIR = "/usr/local/perdersi/repo_s"
-
-    SERVER_SERVER_NAME = SERVER_ORIGIN_DOMAIN_APP + ":" + SERVER_LISTEN_PORT
 else:
     SERVER_LISTEN_HOST = os.environ["PS_SERVER_LISTEN_HOST"] or doraise()
     SERVER_LISTEN_PORT = os.environ["PS_SERVER_LISTEN_PORT"] or doraise()
     SERVER_ORIGIN_DOMAIN_APP = os.environ["PS_SERVER_ORIGIN_DOMAIN_APP"] or doraise()
     SERVER_ORIGIN_DOMAIN_API = os.environ["PS_SERVER_ORIGIN_DOMAIN_API"] or doraise()
+
+SERVER_SERVER_NAME = SERVER_ORIGIN_DOMAIN_APP + ":" + SERVER_LISTEN_PORT
 
 SERVER_SESSION_KEY = 'perdersi_session'
 
@@ -120,7 +121,7 @@ def qqq():
 
 @server_app.route("/", methods=["GET"])
 def index():
-        if SERVER_SESSION_KEY not in session:
+        if SERVER_SESSION_KEY not in flask_session:
                 flask_session[SERVER_SESSION_KEY] = {}
         return f'''
         hello world
