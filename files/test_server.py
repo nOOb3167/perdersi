@@ -147,7 +147,7 @@ def _tree_stream_entry_filter(
     entries: List[Tuple[shabin, FileMode, str]] = git_objects_fun_tree_entries_from_data(treestream.read())
     return [_bin2hex(x[0]) for x in entries if predicate(x[1])]
 
-def _loosedb_raw_object_write(loosedb, presumedhex, objloose: bytes):
+def _loosedb_raw_object_write(loosedb, presumedhex: shahex, objloose: bytes):
     # assert not loosedb.has_object(_hex2bin(presumedhex))
     objpath = loosedb.db_path(loosedb.object_path(presumedhex))
     # assert not os_path_exists(objpath)
@@ -161,8 +161,13 @@ def _loosedb_raw_object_write(loosedb, presumedhex, objloose: bytes):
 def test_monkeypatch_must_be_first(monkeypatch_server_repo_dir):
     pass
 
-def test_get_root(
+def test_fixtures_ensure(
     rc_s: ServerRepoCtx,
+    rc: ServerRepoCtx
+):
+    pass
+
+def test_get_root(
     client: flask.testing.FlaskClient
 ):
     req_get(client, "/sub/", "hello")
@@ -173,7 +178,6 @@ def test_get_head(
     _get_master_tree_hex(client)
 
 def test_get_head_object(
-    rc_s: ServerRepoCtx,
     client: flask.testing.FlaskClient
 ):
     master_tree: shahex = _get_master_tree_hex(client)
@@ -182,7 +186,6 @@ def test_get_head_object(
     assert treedata.find(b"tree") != -1 and treedata.find(b"a.txt") != -1
 
 def test_get_head_trees(
-    rc_s: ServerRepoCtx,
     rc: ServerRepoCtx,
     client: flask.testing.FlaskClient
 ):
@@ -195,7 +198,6 @@ def test_get_head_trees(
         assert loosedb.has_object(_hex2bin(tree))
 
 def test_get_head_blobs(
-    rc_s: ServerRepoCtx,
     rc: ServerRepoCtx,
     client: flask.testing.FlaskClient
 ):
@@ -209,7 +211,6 @@ def test_get_head_blobs(
         assert rc.repo.odb.stream(_hex2bin(b)).read() in datas
 
 def test_commit_head(
-    rc_s: ServerRepoCtx,
     rc: ServerRepoCtx,
     client: flask.testing.FlaskClient
 ):
@@ -219,5 +220,14 @@ def test_commit_head(
     master: git.Reference = git.Reference(rc.repo, "refs/heads/master")
     master.set_commit(commit)
 
-#def test_commit_head(
-#):
+def test_checkout_head(
+    rc: ServerRepoCtx
+):
+    master: git.Reference = git.Reference(rc.repo, "refs/heads/master")
+    # FIXME: only touches paths recorded in index - stray worktree files not removed etc
+    #   see IndexFile.checkout vs head.checkout
+    # FIXME: use force=True ?
+    #index: git.IndexFile = git.IndexFile.from_tree(rc.repo, master.commit.tree)
+    #index.checkout()
+    assert os_path_exists(str(rc.repodir.join(".git")))
+    rc.repo.head.reset(master.commit, index=True, working_tree=True)
