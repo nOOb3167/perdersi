@@ -21,7 +21,7 @@
           path: /usr/local/perdersi
           state: directory
       - name: Venv Req
-        copy: content="Flask>=1.0\nrequests2\npytest\nGitPython"
+        copy: content="Flask>=1.0\nrequests2\npytest\npytest-cov\nGitPython"
           dest=/usr/local/perdersi/requirements.txt
       - name: Venv Create
         pip:
