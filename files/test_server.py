@@ -1,3 +1,4 @@
+from config import config
 import flask.testing
 import git
 from git.objects.fun import (tree_entries_from_data as git_objects_fun_tree_entries_from_data)
@@ -9,7 +10,6 @@ from os.path import (dirname as os_path_dirname,
                      isdir as os_path_isdir)
 import pytest
 from server import (server_app,
-                    SERVER_REPO_DIR,
                     SERVER_SERVER_NAME,
                     ServerRepoCtx)
 from typing import Callable, List, Set, Tuple
@@ -39,9 +39,13 @@ def repodir_s(tmpdir_factory):
 
 @pytest.fixture(scope="session")
 def monkeypatch_server_repo_dir(repodir_s):
-    '''monkeypatch server configuration (SERVER_REPO_DIR)'''
-    import server
-    server.SERVER_REPO_DIR = repodir_s
+    '''monkeypatch server configuration (config["REPO_DIR"])'''
+    config["REPO_DIR"] = repodir_s
+
+@pytest.fixture(scope="session")
+def monkeypatch_server_app_testing():
+    '''monkeypatch server_app TESTING config variable'''
+    server_app.config['TESTING'] = True
 
 @pytest.fixture(scope="session")
 def rc(tmpdir_factory) -> ServerRepoCtx:
@@ -69,13 +73,7 @@ def rc_s(repodir_s) -> ServerRepoCtx:
 
 @pytest.fixture
 def client() -> flask.testing.FlaskClient:
-    server_app.config['TESTING'] = True
-    c = server_app.test_client()
-
-    with server_app.app_context():
-        pass
-
-    yield c
+    yield server_app.test_client()
 
 def _file_open_mkdirp(path: str):
     os_makedirs(os_path_dirname(path), exist_ok=True)
@@ -158,7 +156,7 @@ def _loosedb_raw_object_write(loosedb, presumedhex: shahex, objloose: bytes):
     #loosedb.update_cache(force=True)
     assert loosedb.has_object(_hex2bin(presumedhex))
 
-def test_monkeypatch_must_be_first(monkeypatch_server_repo_dir):
+def test_monkeypatch_must_be_first(monkeypatch_server_repo_dir, monkeypatch_server_app_testing):
     pass
 
 def test_fixtures_ensure(

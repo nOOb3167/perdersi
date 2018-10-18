@@ -17,3 +17,6 @@ ansible:
 
 test:
 	$(PYTHON) -m pytest -vv --cov=. --cov-report term $(_ANNOTATE)
+
+clean:
+	rm -rf cov_annotate

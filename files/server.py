@@ -1,4 +1,4 @@
-import base64
+from config import config, almost_random
 from flask import (current_app as flask_current_app,
                    Flask as flask_Flask,
                    g as flask_g,
@@ -16,40 +16,20 @@ from werkzeug.wsgi import (wrap_file as werkzeug_wsgi_wrap_file)
 # https://github.com/pytest-dev/pytest/issues/2508  # fixture finalizers
 # https://stackoverflow.com/questions/6624453/whats-the-correct-way-to-convert-bytes-to-a-hex-string-in-python-3/36149089#36149089
 # https://stackoverflow.com/questions/13317536/get-a-list-of-all-routes-defined-in-the-app/13318415#13318415
+# https://www.python.org/dev/peps/pep-0366/  # relative import __package__ hack
 
-class CsrfExc(Exception):
-        pass
-
-def doraise():
-    raise Exception('Error')
-
-def almost_random():
-        return base64.b32encode(os.urandom(24)).decode("UTF-8")
-
-SERVER_CONFIG_PROD = "PS_SERVER_CONFIG_PROD" in os.environ and os.environ["PS_SERVER_CONFIG_PROD"]
-    
-if not SERVER_CONFIG_PROD:
-    SERVER_LISTEN_HOST = "localhost.localdomain"
-    SERVER_LISTEN_PORT = "5000"
-    SERVER_ORIGIN_DOMAIN_APP = "localhost.localdomain"
-    SERVER_ORIGIN_DOMAIN_API = "api.localhost.localdomain"
-    SERVER_REPO_DIR = "/usr/local/perdersi/repo_s"
-else:
-    SERVER_LISTEN_HOST = os.environ["PS_SERVER_LISTEN_HOST"] or doraise()
-    SERVER_LISTEN_PORT = os.environ["PS_SERVER_LISTEN_PORT"] or doraise()
-    SERVER_ORIGIN_DOMAIN_APP = os.environ["PS_SERVER_ORIGIN_DOMAIN_APP"] or doraise()
-    SERVER_ORIGIN_DOMAIN_API = os.environ["PS_SERVER_ORIGIN_DOMAIN_API"] or doraise()
-
-SERVER_SERVER_NAME = SERVER_ORIGIN_DOMAIN_APP + ":" + SERVER_LISTEN_PORT
-
+SERVER_SERVER_NAME = config["ORIGIN_DOMAIN_APP"] + ":" + config["LISTEN_PORT"]
 SERVER_SESSION_KEY = 'perdersi_session'
 
 server_app = flask_Flask(__name__, static_url_path = "")
 server_app.secret_key = almost_random()
 server_app.config["SERVER_NAME"] = SERVER_SERVER_NAME
 
+class CsrfExc(Exception):
+        pass
+
 def server_check_csrf():
-        u1 = urllib.parse.urlparse(ORIGIN_DOMAIN_APP)
+        u1 = urllib.parse.urlparse(config["ORIGIN_DOMAIN_APP"])
         if 'Origin' in flask_request.headers:
                 u2 = urllib.parse.urlparse(flask_request.headers['Origin'])
                 raise CsrfExc()
@@ -71,20 +51,10 @@ class ServerRepoCtx:
             repo = git.Repo.init(repodir)
         return ServerRepoCtx(repodir, repo)
 
-class ServerRepo:
-    def __init__(self):
-        pass
-    @staticmethod
-    def prep():
-        repo = git.Repo.init(repodir)
-    @classmethod
-    def for_read(cls):
-        repo = git.Repo(repodir)
-
 def server_repo_ctx_get():
     ''' within Application Context '''
     if "rc" not in flask_g:
-        flask_g.rc = ServerRepoCtx.create_ensure(SERVER_REPO_DIR)
+        flask_g.rc = ServerRepoCtx.create_ensure(config["REPO_DIR"])
     return flask_g.rc
 @server_app.teardown_appcontext
 def server_repo_ctx_teardown(err):
@@ -127,5 +97,6 @@ def index():
         hello world
         '''
 
-if __name__ == "__main__":
-        server_app.run(host = SERVER_LISTEN_HOST, port = SERVER_LISTEN_PORT)
+def run():
+    ''' callable externally '''
+    server_app.run(host = config["LISTEN_HOST"], port = config["LISTEN_PORT"])
