@@ -96,7 +96,3 @@ def index():
         return f'''
         hello world
         '''
-
-def run():
-    ''' callable externally '''
-    server_app.run(host = config["LISTEN_HOST"], port = config["LISTEN_PORT"])
