@@ -29,12 +29,12 @@ class CsrfExc(Exception):
         pass
 
 def server_check_csrf():
-        u1 = urllib.parse.urlparse(config["ORIGIN_DOMAIN_APP"])
-        if 'Origin' in flask_request.headers:
-                u2 = urllib.parse.urlparse(flask_request.headers['Origin'])
-                raise CsrfExc()
-        if not server_compare_urlparse_csrf(u1, u2):
-                raise CsrfExc()
+        if "Origin" not in flask_request.headers:
+            raise CsrfExc()
+        u1 = "http://" + config["ORIGIN_DOMAIN_APP"] + ":" + config["LISTEN_PORT"]
+        u2 = flask_request.headers['Origin']
+        if u1 != u2:
+            raise CsrfExc()
 
 def server_compare_urlparse_csrf(u1, u2):
         return (u1.scheme == u2.scheme) and (u1.netloc == u2.netloc)
@@ -62,6 +62,8 @@ def server_repo_ctx_teardown(err):
 
 def server_route_api_get(path):
     return server_app.route(path, subdomain="api", methods=["GET"])
+def server_route_api_post(path):
+    return server_app.route(path, subdomain="api", methods=["POST"])
 
 @server_route_api_get("/refs/heads/<refname_p>")
 def refs_heads(refname_p):
@@ -83,8 +85,9 @@ def object(objhex):
     fileiter = werkzeug_wsgi_wrap_file(flask_request.environ, objectfile)
     return flask_current_app.response_class(fileiter, content_type="application/octet-stream", direct_passthrough=True)
 
-@server_route_api_get("/sub/")
+@server_route_api_post("/sub/")
 def qqq():
+    server_check_csrf()
     return f'''
     hello world qqq
     '''

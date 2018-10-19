@@ -9,6 +9,7 @@ from os.path import (dirname as os_path_dirname,
                      exists as os_path_exists,
                      isdir as os_path_isdir)
 import pytest
+import server
 from server import (server_app,
                     SERVER_SERVER_NAME,
                     ServerRepoCtx)
@@ -24,12 +25,31 @@ PS_GIT_FILEMODE_TREE            = 0o0040000
 PS_GIT_FILEMODE_BLOB            = 0o0100644
 PS_GIT_FILEMODE_BLOB_EXECUTABLE = 0o0100755
 
+def force_origin_presence(kwargs):
+    if "headers" not in kwargs:
+        kwargs["headers"] = {}
+    if "Origin" not in kwargs["headers"]:
+        kwargs["headers"]["Origin"] = "http://localhost.localdomain:5000"
+
 def req_get(
     client: flask.testing.FlaskClient,
     path: str,
-    data
+    data,
+    **kwargs
 ):
-    rv = client.get(base_url="http://api.localhost.localdomain:5000", path=path, data=data)
+    force_origin_presence(kwargs)
+    rv = client.get(base_url="http://api.localhost.localdomain:5000", path=path, data=data, **kwargs)
+    assert rv.status_code == 200
+    return rv
+
+def req_post(
+    client: flask.testing.FlaskClient,
+    path: str,
+    data,
+    **kwargs
+):
+    force_origin_presence(kwargs)
+    rv = client.post(base_url="http://api.localhost.localdomain:5000", path=path, data=data, **kwargs)
     assert rv.status_code == 200
     return rv
 
@@ -165,10 +185,22 @@ def test_fixtures_ensure(
 ):
     pass
 
-def test_get_root(
+def test_sub_post(
     client: flask.testing.FlaskClient
 ):
-    req_get(client, "/sub/", "hello")
+    req_post(client, "/sub/", "hello")
+
+def test_sub_post_csrf(
+    client: flask.testing.FlaskClient
+):
+    with pytest.raises(server.CsrfExc):
+        req_post(client, "/sub/", "hello", headers={"Origin": "http://bad.localhost.localdomain:5000"})
+    with pytest.raises(server.CsrfExc):
+        req_post(client, "/sub/", "hello", headers={"Origin": "http://localdomain:5000"})
+    with pytest.raises(server.CsrfExc):
+        req_post(client, "/sub/", "hello", headers={"Origin": "http://localhost.localdomain:1111"})
+    with pytest.raises(server.CsrfExc):
+        req_post(client, "/sub/", "hello", headers={"Origin": "http://localhost.localdomain"})
 
 def test_get_head(
     client: flask.testing.FlaskClient
