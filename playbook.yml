@@ -37,13 +37,15 @@
           dest=/usr/local/perdersi/
       - name: Nginx Copy Conf
         copy:
-          src=/usr/local/perdersi/nginx/ps_serv.conf
+          src=nginx/ps_serv.conf
           dest=/etc/nginx/conf.d/ps_serv.conf
-          remote_src=yes
       - name: Nginx Apply Conf
         service:
           name=nginx
           state=restarted
+# semanage -a -t http_port_t -p tcp 5200
+# firewall-cmd --permanent --service=http --add-port=5200/tcp
+# systemctl restart firewalld
   - name: Venv
     block:
       - name: Venv Path
