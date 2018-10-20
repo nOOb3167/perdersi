@@ -1,3 +1,8 @@
 /.coverage
 /cov_annotate
+/playbook.retry
 /files/__pycache__
+/sepol/pspol.pp
+/sepol/reload.stamp
+/sepol/tmp
+

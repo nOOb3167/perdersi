@@ -1,4 +1,4 @@
-.PHONY: all ansible test
+.PHONY: all ansible test clean sepol
 
 .DEFAULT_GOAL := test
 
@@ -20,3 +20,6 @@ test:
 
 clean:
 	rm -rf cov_annotate
+
+sepol:
+	$(MAKE) -C sepol

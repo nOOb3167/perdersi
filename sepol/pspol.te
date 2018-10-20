@@ -1,0 +1,29 @@
+# https://selinuxproject.org/page/PolicyLanguage
+# https://selinuxproject.org/page/UserStatements
+# https://selinuxproject.org/page/RoleStatements
+#   should use a role_transition ?
+# useradd -Z git_shell_u joe
+# https://wiki.gentoo.org/wiki/SELinux/Tutorials/Creating_a_user_domain
+# https://github.com/sjvermeu/small.coding/blob/master/gensetup/helper/setup-4-selinux.sh
+# https://selinuxproject.org/page/PolicyConfigurationFiles
+#   user_contexts(5)
+#   semodule_package(8) : semodule_package -s (seusers file)
+#   /etc/selinux/targeted/contexts/users/
+#   system_r:sshd_t:s0		sysadm_r:sysadm_t:s0 staff_r:staff_t:s0 user_r:user_t:s0
+#   make sure sshd can transition role ?
+# https://wiki.gentoo.org/wiki/SELinux/Tutorials/How_is_the_policy_provided_and_loaded
+# https://selinuxproject.org/page/PolicyValidate
+# /usr/share/selinux/devel/include/Makefile refresh target lists the -b method
+#   semodule -b base.pp / Although PolicyValidate lists -B
+# https://selinuxproject.org/page/PolicyConfigurationFiles#users.2Flocal.users_File
+#   The file would contain local user definitions in the form of user statements
+policy_module(pspol, 1.0)
+
+role pspol_r;
+
+type pspol_t;
+type pspol_exec_t;
+
+init_daemon_domain(pspol_t, pspol_exec_t)
+
+permissive pspol_t;

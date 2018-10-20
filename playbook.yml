@@ -13,7 +13,30 @@
     when: ansible_facts['distribution'] != 'Fedora'
   - name: Packages
     dnf:
-      name: ['python3', 'python3-libselinux', 'python3-virtualenv']
+      name: ['python3', 'python3-libselinux', 'python3-virtualenv', 'selinux-policy-devel', 'policycoreutils-python-utils']
+  - name: User
+    user:
+      name: psuser
+      create_home: yes
+
+  - name: Se
+    block:
+      - name: Se
+        copy:
+          src=sepol
+          dest=/usr/local/perdersi/
+      # FIXME: https://serverfault.com/questions/720598/execute-copy-and-set-only-if-something-changed/720602#720602
+      - name: Se
+        shell: make -C /usr/local/perdersi/sepol pspol.pp reload.stamp
+      - name: Se
+        shell: semodule -i pspol.pp
+      - name: Se
+        shell: _mkseuser.sh
+	chdir: /usr/local/perdersi/sepol/
+      - name: Se
+        shell: _mkselogin.sh
+        chdir: /usr/local/perdersi/sepol/
+# shell: semanage login -a -s guest_u psuser
   - name: Venv
     block:
       - name: Venv Path
