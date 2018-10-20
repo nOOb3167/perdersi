@@ -21,22 +21,20 @@
 
   - name: Se
     block:
-      - name: Se
-        copy:
+      # FIXME: https://stackoverflow.com/questions/44130089/how-to-use-changed-when-with-ansible-shell-module/44130167#44130167
+      - name: Se Transfer
+        synchronize:
           src=sepol
           dest=/usr/local/perdersi/
-      # FIXME: https://serverfault.com/questions/720598/execute-copy-and-set-only-if-something-changed/720602#720602
-      - name: Se
-        shell: make -C /usr/local/perdersi/sepol pspol.pp reload.stamp
-      - name: Se
+      - name: Se Remake
+        shell: make pspol.pp reload.stamp
+          chdir=/usr/local/perdersi/sepol/
+      - name: Se Load
         shell: semodule -i pspol.pp
-      - name: Se
-        shell: _mkseuser.sh
-	chdir: /usr/local/perdersi/sepol/
-      - name: Se
-        shell: _mkselogin.sh
-        chdir: /usr/local/perdersi/sepol/
-# shell: semanage login -a -s guest_u psuser
+          chdir=/usr/local/perdersi/sepol/
+      - name: Se Post
+        shell: ./_mkseuser.sh
+          chdir=/usr/local/perdersi/sepol/
   - name: Venv
     block:
       - name: Venv Path
