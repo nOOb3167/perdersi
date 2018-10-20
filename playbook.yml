@@ -26,15 +26,24 @@
         synchronize:
           src=sepol
           dest=/usr/local/perdersi/
-      - name: Se Remake
-        shell: make pspol.pp reload.stamp
+      - name: Se Process
+        shell: make pspol.pp reload.stamp sanity mkuser
           chdir=/usr/local/perdersi/sepol/
-      - name: Se Load
-        shell: semodule -i pspol.pp
-          chdir=/usr/local/perdersi/sepol/
-      - name: Se Post
-        shell: ./_mkseuser.sh
-          chdir=/usr/local/perdersi/sepol/
+  - name: Nginx
+    block:
+      - name: Nginx Transfer
+        synchronize:
+          src=nginx
+          dest=/usr/local/perdersi/
+      - name: Nginx Copy Conf
+        copy:
+          src=/usr/local/perdersi/nginx/ps_serv.conf
+          dest=/etc/nginx/conf.d/ps_serv.conf
+          remote_src=yes
+      - name: Nginx Apply Conf
+        service:
+          name=nginx
+          state=restarted
   - name: Venv
     block:
       - name: Venv Path
