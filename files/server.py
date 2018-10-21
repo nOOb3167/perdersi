@@ -1,4 +1,5 @@
-from config import config, almost_random
+import base64
+import flask
 from flask import (current_app as flask_current_app,
                    Flask as flask_Flask,
                    g as flask_g,
@@ -10,6 +11,8 @@ import os
 import urllib.parse
 from werkzeug.wsgi import (wrap_file as werkzeug_wsgi_wrap_file)
 
+confdict = dict
+
 # http://flask.pocoo.org/docs/1.0/testing/
 # http://flask.pocoo.org/docs/1.0/appcontext/#storing-data
 # http://flask.pocoo.org/docs/1.0/api/#flask.Flask.teardown_appcontext
@@ -18,12 +21,10 @@ from werkzeug.wsgi import (wrap_file as werkzeug_wsgi_wrap_file)
 # https://stackoverflow.com/questions/13317536/get-a-list-of-all-routes-defined-in-the-app/13318415#13318415
 # https://www.python.org/dev/peps/pep-0366/  # relative import __package__ hack
 
-SERVER_SERVER_NAME = config["ORIGIN_DOMAIN_APP"] + ":" + config["LISTEN_PORT"]
-SERVER_SESSION_KEY = 'perdersi_session'
+config: confdict = None
+server_app: flask.Flask = flask_Flask(__name__, static_url_path = "")
 
-server_app = flask_Flask(__name__, static_url_path = "")
-server_app.secret_key = almost_random()
-server_app.config["SERVER_NAME"] = SERVER_SERVER_NAME
+SERVER_SESSION_KEY = 'perdersi_session'
 
 class CsrfExc(Exception):
         pass
@@ -60,12 +61,10 @@ def server_repo_ctx_get():
 def server_repo_ctx_teardown(err):
     pass
 
-def server_route_api_get(path):
-    return server_app.route(path, subdomain="api", methods=["GET"])
 def server_route_api_post(path):
     return server_app.route(path, subdomain="api", methods=["POST"])
 
-@server_route_api_get("/refs/heads/<refname_p>")
+@server_route_api_post("/refs/heads/<refname_p>")
 def refs_heads(refname_p):
     refname = "refs/heads/" + refname_p
     rc = server_repo_ctx_get()
@@ -74,7 +73,7 @@ def refs_heads(refname_p):
     tree = commit.tree
     return flask_jsonify({ "tree": tree.hexsha })
 
-@server_route_api_get("/object/<objhex>")
+@server_route_api_post("/object/<objhex>")
 def object(objhex):
     objbin = bytes.fromhex(objhex)
     rc = server_repo_ctx_get()
@@ -99,3 +98,31 @@ def index():
         return f'''
         hello world
         '''
+
+def server_config_make_default():
+    return {
+        "LISTEN_HOST": "localhost.localdomain",
+        "LISTEN_PORT": "5201",
+        "ORIGIN_DOMAIN_APP": "localhost.localdomain",
+        "ORIGIN_DOMAIN_API": "api.localhost.localdomain",
+        "REPO_DIR": "/usr/local/perdersi/repo_s"
+    }
+
+def server_config_flask():
+    global config, server_app
+    server_app.secret_key = base64.b32encode(os.urandom(24)).decode("UTF-8")
+    server_app.config["SERVER_NAME"] = config["ORIGIN_DOMAIN_APP"] + ":" + config["LISTEN_PORT"]
+    server_app.config['TESTING'] = "TESTING" in config and config["TESTING"]
+
+def server_run_prepare(conf: confdict = None):
+    global config, server_app
+    config = conf if conf else server_config_make_default()
+    server_app = server_config_flask()
+
+def server_run():
+    global server_app
+    server_app.run(host = config["LISTEN_HOST"], port = config["LISTEN_PORT"])
+
+if __name__ == "__main__":
+    server_run_prepare()
+    run()

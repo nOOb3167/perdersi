@@ -1,4 +1,3 @@
-from config import config
 import flask.testing
 import git
 from git.objects.fun import (tree_entries_from_data as git_objects_fun_tree_entries_from_data)
@@ -10,8 +9,10 @@ from os.path import (dirname as os_path_dirname,
                      isdir as os_path_isdir)
 import pytest
 import server
-from server import (server_app,
-                    SERVER_SERVER_NAME,
+from server import (config as server_config,
+                    server_app,
+                    server_config_make_default,
+                    server_run_prepare,
                     ServerRepoCtx)
 from typing import Callable, List, Set, Tuple
 from zlib import (decompress as zlib_decompress)
@@ -25,51 +26,29 @@ PS_GIT_FILEMODE_TREE            = 0o0040000
 PS_GIT_FILEMODE_BLOB            = 0o0100644
 PS_GIT_FILEMODE_BLOB_EXECUTABLE = 0o0100755
 
-def force_origin_presence(kwargs):
-    if "headers" not in kwargs:
-        kwargs["headers"] = {}
-    if "Origin" not in kwargs["headers"]:
-        kwargs["headers"]["Origin"] = "http://localhost.localdomain:5000"
+class RetCodeErr(Exception):
+    pass
+class RetCode500(RetCodeErr):
+    pass
 
-def req_get(
-    client: flask.testing.FlaskClient,
-    path: str,
-    data,
-    **kwargs
-):
-    force_origin_presence(kwargs)
-    rv = client.get(base_url="http://api.localhost.localdomain:5000", path=path, data=data, **kwargs)
-    assert rv.status_code == 200
-    return rv
-
-def req_post(
-    client: flask.testing.FlaskClient,
-    path: str,
-    data,
-    **kwargs
-):
-    force_origin_presence(kwargs)
-    rv = client.post(base_url="http://api.localhost.localdomain:5000", path=path, data=data, **kwargs)
-    assert rv.status_code == 200
-    return rv
+@pytest.fixture(scope="session")
+def repodir(tmpdir_factory):
+    return tmpdir_factory.mktemp("repo")
 
 @pytest.fixture(scope="session")
 def repodir_s(tmpdir_factory):
     return tmpdir_factory.mktemp("repo_s")
 
 @pytest.fixture(scope="session")
-def monkeypatch_server_repo_dir(repodir_s):
-    '''monkeypatch server configuration (config["REPO_DIR"])'''
-    config["REPO_DIR"] = repodir_s
+def server_run_prepare_for_testing(repodir_s):
+    _config = server_config_make_default()
+    _config["REPO_DIR"] = repodir_s
+    _config["TESTING"] = True
+    server_run_prepare(_config)
 
 @pytest.fixture(scope="session")
-def monkeypatch_server_app_testing():
-    '''monkeypatch server_app TESTING config variable'''
-    server_app.config['TESTING'] = True
-
-@pytest.fixture(scope="session")
-def rc(tmpdir_factory) -> ServerRepoCtx:
-    repodir = tmpdir_factory.mktemp("repo")
+def rc(repodir) -> ServerRepoCtx:
+    repodir = repodir
     repo = git.Repo.init(repodir)
     yield ServerRepoCtx(repodir, repo)
 
@@ -95,6 +74,26 @@ def rc_s(repodir_s) -> ServerRepoCtx:
 def client() -> flask.testing.FlaskClient:
     yield server_app.test_client()
 
+def _force_origin_presence(kwargs):
+    if "headers" not in kwargs:
+        kwargs["headers"] = {}
+    if "Origin" not in kwargs["headers"]:
+        kwargs["headers"]["Origin"] = "http://localhost.localdomain:5201"
+
+def _req_post(
+    client: flask.testing.FlaskClient,
+    path: str,
+    data,
+    **kwargs
+):
+    _force_origin_presence(kwargs)
+    rv = client.post(base_url="http://api.localhost.localdomain:5201", path=path, data=data, **kwargs)
+    if rv.status_code == 500:
+        raise RetCode500()
+    if rv.status_code != 200:
+        raise RetCodeErr()
+    return rv
+
 def _file_open_mkdirp(path: str):
     os_makedirs(os_path_dirname(path), exist_ok=True)
     return open(path, "wb")
@@ -107,7 +106,7 @@ def _hex2bin(sss: shahex):
 def _get_master_tree_hex(
     client: flask.testing.FlaskClient
 ) -> shahex:
-    rv = req_get(client, "/refs/heads/master", "")
+    rv = _req_post(client, "/refs/heads/master", "")
     r: dict = json_loads(rv.data)
     assert type(r["tree"]) == str
     return r["tree"]
@@ -116,7 +115,7 @@ def _get_object(
     client: flask.testing.FlaskClient,
     obj: shahex
 ) -> bytes:
-    rv = req_get(client, "/object/" + obj, "")
+    rv = _req_post(client, "/object/" + obj, "")
     objloose: bytes = rv.data
     return objloose
 
@@ -176,7 +175,7 @@ def _loosedb_raw_object_write(loosedb, presumedhex: shahex, objloose: bytes):
     #loosedb.update_cache(force=True)
     assert loosedb.has_object(_hex2bin(presumedhex))
 
-def test_monkeypatch_must_be_first(monkeypatch_server_repo_dir, monkeypatch_server_app_testing):
+def test_monkeypatch_must_be_first(server_run_prepare_for_testing):
     pass
 
 def test_fixtures_ensure(
@@ -188,19 +187,19 @@ def test_fixtures_ensure(
 def test_sub_post(
     client: flask.testing.FlaskClient
 ):
-    req_post(client, "/sub/", "hello")
+    _req_post(client, "/sub/", "hello")
 
 def test_sub_post_csrf(
     client: flask.testing.FlaskClient
 ):
     with pytest.raises(server.CsrfExc):
-        req_post(client, "/sub/", "hello", headers={"Origin": "http://bad.localhost.localdomain:5000"})
+        _req_post(client, "/sub/", "hello", headers={"Origin": "http://bad.localhost.localdomain:5201"})
     with pytest.raises(server.CsrfExc):
-        req_post(client, "/sub/", "hello", headers={"Origin": "http://localdomain:5000"})
+        _req_post(client, "/sub/", "hello", headers={"Origin": "http://localdomain:5201"})
     with pytest.raises(server.CsrfExc):
-        req_post(client, "/sub/", "hello", headers={"Origin": "http://localhost.localdomain:1111"})
+        _req_post(client, "/sub/", "hello", headers={"Origin": "http://localhost.localdomain:1111"})
     with pytest.raises(server.CsrfExc):
-        req_post(client, "/sub/", "hello", headers={"Origin": "http://localhost.localdomain"})
+        _req_post(client, "/sub/", "hello", headers={"Origin": "http://localhost.localdomain"})
 
 def test_get_head(
     client: flask.testing.FlaskClient
