@@ -14,6 +14,9 @@
   - name: Packages
     dnf:
       name:
+        # dnf group, includes gcc, make, etc
+        - "@C Development Tools and Libraries"
+        - git
         - nginx
         - policycoreutils-python-utils
         - python3
