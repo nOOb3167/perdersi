@@ -1,4 +1,4 @@
-.PHONY: all ansible test clean sepol
+.PHONY: all ansible ansible-base ansible-se test clean sepol
 
 .DEFAULT_GOAL := test
 
@@ -12,14 +12,13 @@ endif
 
 all: ansible
 
-ansible:
-	ansible-playbook-3 -i ./inventory playbook.yml
+ansible: ansible-base ansible-se
+
+ansible-base ansible-se: ansible-%: ansible/inventory ansible/%.yml
+	ansible-playbook-3 -i ansible/inventory ansible/$*.yml
 
 test:
 	$(PYTHON) -m pytest -vv --cov=. --cov-report term $(_ANNOTATE)
 
 clean:
 	rm -rf cov_annotate
-
-sepol:
-	$(MAKE) -C sepol

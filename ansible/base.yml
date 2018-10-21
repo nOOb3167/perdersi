@@ -1,4 +1,4 @@
-- name: Hello Play
+- name: General OS Setup
   hosts: perdersi
   remote_user: root
   become: yes
@@ -13,22 +13,27 @@
     when: ansible_facts['distribution'] != 'Fedora'
   - name: Packages
     dnf:
-      name: ['python3', 'python3-libselinux', 'python3-virtualenv', 'selinux-policy-devel', 'policycoreutils-python-utils']
+      name:
+        - nginx
+        - policycoreutils-python-utils
+        - python3
+        - python3-libselinux
+        - python3-virtualenv
+        - selinux-policy-devel
+        - policycoreutils-python-utils
   - name: User
     user:
       name: psuser
       create_home: yes
 
-  - name: Se
+  - name: Firewall
     block:
-      # FIXME: https://stackoverflow.com/questions/44130089/how-to-use-changed-when-with-ansible-shell-module/44130167#44130167
-      - name: Se Transfer
-        synchronize:
-          src=sepol
-          dest=/usr/local/perdersi/
-      - name: Se Process
-        shell: make pspol.pp reload.stamp sanity mkuser
-          chdir=/usr/local/perdersi/sepol/
+      - name: Firewall Port
+        shell: firewall-cmd --permanent --service=http --add-port=5200/tcp
+      - name: Firewall Restart
+        service:
+          name=firewalld
+          state=restarted
   - name: Nginx
     block:
       - name: Nginx Transfer
@@ -43,9 +48,6 @@
         service:
           name=nginx
           state=restarted
-# semanage -a -t http_port_t -p tcp 5200
-# firewall-cmd --permanent --service=http --add-port=5200/tcp
-# systemctl restart firewalld
   - name: Venv
     block:
       - name: Venv Path

@@ -1,8 +1,9 @@
 /.coverage
 /cov_annotate
-/playbook.retry
+/ansible/base.retry
+/ansible/se.retry
 /files/__pycache__
-/sepol/pspol.pp
-/sepol/reload.stamp
-/sepol/tmp
+/ansible/sepol/pspol.pp
+/ansible/sepol/reload.stamp
+/ansible/sepol/tmp
 

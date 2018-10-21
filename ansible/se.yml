@@ -1,0 +1,23 @@
+- name: Selinux Setup
+  hosts: perdersi
+  remote_user: root
+  become: yes
+
+  vars:
+    ansible_python_interpreter: python3
+
+  tasks:
+  - name: Distro Check
+    fail:
+      msg: 'Not fedora'
+    when: ansible_facts['distribution'] != 'Fedora'
+
+  - name: Se
+    block:
+      - name: Se Transfer
+        synchronize:
+          src=sepol
+          dest=/usr/local/perdersi/
+      - name: Se Rebuild
+        shell: make seport sereload
+          chdir=/usr/local/perdersi/sepol/
