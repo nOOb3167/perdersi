@@ -2,6 +2,7 @@
 /cov_annotate
 /ansible/base.retry
 /ansible/se.retry
+/ansible/updater.retry
 /files/__pycache__
 /ansible/sepol/pspol.pp
 /ansible/sepol/reload.stamp

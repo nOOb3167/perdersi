@@ -16,6 +16,7 @@
       name:
         # dnf group, includes gcc, make, etc
         - "@C Development Tools and Libraries"
+        - boost-devel
         - git
         - nginx
         - policycoreutils-python-utils

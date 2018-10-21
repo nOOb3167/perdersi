@@ -1,0 +1,50 @@
+- name: Updater
+  hosts: perdersi
+  remote_user: root
+  become: yes
+
+  vars:
+    ansible_python_interpreter: python3
+
+  tasks:
+  - name: Distro Check
+    fail:
+      msg: 'Not fedora'
+    when: ansible_facts['distribution'] != 'Fedora'
+  - name: Build
+    block:
+      - name: LibGit2 Repo
+        git:
+          accept_hostkey: yes
+          dest: /usr/local/perdersi/libgit2
+          repo: https://github.com/libgit2/libgit2.git
+      - name: LibGit2 Configure
+        shell: >
+            cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr/local/perdersi/libgit2_inst
+            -DBUILD_CLAR:BOOL=NO
+            -DBUILD_SHARED_LIBS:BOOL=NO
+            -DCURL:BOOL=NO
+            -DUSE_BUNDLED_ZLIB=YES
+            -DUSE_HTTPS:BOOL=NO
+            -DUSE_SSH:BOOL=NO
+            .
+        args:
+          chdir: /usr/local/perdersi/libgit2
+      - name: LibGit2 Build
+        shell: cmake --build . --target install
+          chdir=/usr/local/perdersi/libgit2
+      - name: Src Transfer
+        synchronize:
+          src=../src
+          dest=/usr/local/perdersi/
+      - name: Src Configure
+        shell: >
+          cmake
+          -DLIBGIT2_INCLUDE_DIR:PATH=/usr/local/perdersi/libgit2_inst/include
+          -DLIBGIT2_LIBRARIES:FILEPATH=/usr/local/perdersi/libgit2_inst/lib/libgit2.a
+          .
+        args:
+          chdir: /usr/local/perdersi/src
+      - name: Src Build
+        shell: cmake --build .
+          chdir=/usr/local/perdersi/src
