@@ -115,9 +115,9 @@ def server_config_flask():
     server_app.config['TESTING'] = "TESTING" in config and config["TESTING"]
 
 def server_run_prepare(conf: confdict = None):
-    global config, server_app
+    global config
     config = conf if conf else server_config_make_default()
-    server_app = server_config_flask()
+    server_config_flask()
 
 def server_run():
     global server_app

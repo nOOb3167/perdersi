@@ -32,8 +32,10 @@
 
   - name: Firewall
     block:
-      - name: Firewall Port
+      - name: Firewall Port 5200
         shell: firewall-cmd --permanent --service=http --add-port=5200/tcp
+      - name: Firewall Port 5201
+        shell: firewall-cmd --permanent --service=http --add-port=5201/tcp
       - name: Firewall Restart
         service:
           name=firewalld

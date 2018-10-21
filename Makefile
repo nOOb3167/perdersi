@@ -1,4 +1,4 @@
-.PHONY: all ansible ansible-base ansible-se test clean sepol
+.PHONY: all ansible ansible-base ansible-se serv test clean sepol
 
 .DEFAULT_GOAL := test
 
@@ -22,6 +22,9 @@ ansible: ansible-base ansible-se
 
 ansible-base ansible-se ansible-updater: ansible-%: ansible/inventory ansible/%.yml
 	ansible-playbook-3 $(_V) -i ansible/inventory ansible/$*.yml
+
+serv:
+	python3 files/config_serv.py
 
 test:
 	$(PYTHON) -m pytest -vv --cov=. --cov-report term $(_ANNOTATE) $(_X)
