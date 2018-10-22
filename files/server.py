@@ -125,4 +125,4 @@ def server_run():
 
 if __name__ == "__main__":
     server_run_prepare()
-    run()
+    server_run()
