@@ -21,6 +21,21 @@ typedef ::std::unique_ptr<git_tree, void(*)(git_tree *)> unique_ptr_gittree;
 namespace ns_git
 {
 
+class ObjectDataInfo
+{
+public:
+	ObjectDataInfo(const std::string &data, const std::string &type, size_t data_offset) :
+		m_type(type),
+		m_data_offset(data_offset)
+	{
+		if (m_data_offset >= data.size())
+			throw std::runtime_error("odi data_offset");
+	}
+
+	std::string m_type;
+	size_t m_data_offset;
+};
+
 std::string inflatebuf(const std::string &buf)
 {
 	/* https://www.zlib.net/zpipe.c
@@ -71,30 +86,25 @@ std::string inflatebuf(const std::string &buf)
 	return result;
 }
 
-void get_object_data_info(const std::string &data, std::string *out_type, size_t *out_data_offset)
+ObjectDataInfo get_object_data_info(const std::string &data)
 {
-	/* see function get_object_header in odb_loose.c */
-	/* also this comment from git source LUL: (sha1_file.c::parse_sha1_header_extended)
-	*   """We used to just use "sscanf()", but that's actually way
-	*   too permissive for what we want to check. So do an anal
-	*   object header parse by hand."""
-	*/
-
-	/* format: "[:alpha:]+ [:digit:]+\0" */
-	/*   two space separated fields. NULL at the end. */
-
-	/* parse type string */
+	/* format: "(type)(space)(number)(NULL)"
+	   format: "[:alpha:]+ [:digit:]+\0" */
+	/* skip past type */
 	size_t spc;
 	if ((spc = data.find_first_of(' ', 0)) == std::string::npos)
 		throw std::runtime_error("hdr spc");
-	/* parse size string */
+	/* skip past space and size */
 	if (data.find_first_not_of("0123456789", spc + 1) == std::string::npos)
 		throw std::runtime_error("hdr num");
 	if (data.at(data.find_first_not_of("0123456789", spc + 1)) != '\0')
 		throw std::runtime_error("hdr null");
 
-	*out_type = data.substr(0, data.find_first_of(' ', 0));
-	*out_data_offset = data.find_first_not_of("0123456789", spc + 1);
+	return ObjectDataInfo(
+		data,
+		data.substr(0, data.find_first_of(' ', 0)),       /* type */
+		data.find_first_not_of("0123456789", spc + 1) + 1 /* data_offset */
+	);
 }
 
 git_oid oid_from_hexstr(const std::string &str)
@@ -221,11 +231,8 @@ std::string get_head(PsCon *client, const std::string &refname);
 
 std::string get_object(PsCon *client, const std::string &objhex)
 {
-	std::string fst = objhex.substr(0, 2);
-	std::string snd = objhex.substr(2, std::string::npos);
-	std::string loose = client->reqPost_("/lowtech/objects/" + fst + "/" + snd, "").body();
+	std::string loose = client->reqPost_("/lowtech/objects/" + objhex.substr(0, 2) + "/" + objhex.substr(2), "").body();
 	return loose;
-	std::string treedata = ns_git::inflatebuf(loose);
 }
 
 std::string get_head(PsCon *client, const std::string &refname)
@@ -240,16 +247,14 @@ std::string get_head(PsCon *client, const std::string &refname)
 
 void ensure_object_match(const std::string &objloose, const shahex_t &obj_expected, const std::string &type_expected, git_otype otype_expected)
 {
-	git_oid oid_expected = ns_git::oid_from_hexstr(obj_expected);
+	const git_oid oid_expected = ns_git::oid_from_hexstr(obj_expected);
 
-	std::string type_loose;
-	size_t data_offset;
-	ns_git::get_object_data_info(ns_git::inflatebuf(objloose), &type_loose, &data_offset);
-	if (type_loose != type_expected)
+	const ns_git::ObjectDataInfo loose = ns_git::get_object_data_info(ns_git::inflatebuf(objloose));
+	if (loose.m_type != type_expected)
 		throw PsConExc();
 
 	git_oid oid_loose = {};
-	if (!!git_odb_hash(&oid_loose, objloose.data() + data_offset, objloose.size() - data_offset, otype_expected))
+	if (!!git_odb_hash(&oid_loose, objloose.data() + loose.m_data_offset, objloose.size() - loose.m_data_offset, otype_expected))
 		throw PsConExc();
 
 	if (!!git_oid_cmp(&oid_expected, &oid_loose))
@@ -261,8 +266,8 @@ void get_write_object_raw(git_repository *repo, const shahex_t &obj, const std::
 	ensure_object_match(obj, objloose, "tree", GIT_OBJ_TREE);
 	assert(!!git_repository_path(repo));
 	/* get temp and final path */
-	std::string temppath = (boost::filesystem::temp_directory_path() / boost::filesystem::unique_path()).string();
-	std::string objectpath = std::string(git_repository_path(repo)) + "/objects/" + obj.substr(0, 2) + "/" + obj.substr(2, std::string::npos);
+	const std::string temppath = (boost::filesystem::temp_directory_path() / boost::filesystem::unique_path()).string();
+	const std::string objectpath = std::string(git_repository_path(repo)) + "/objects/" + obj.substr(0, 2) + "/" + obj.substr(2, std::string::npos);
 	/* write temp */
 	std::ofstream ff(temppath, std::ios::out | std::ios::trunc | std::ios::binary);
 	ff.write(objloose.data(), objloose.size());
@@ -273,7 +278,7 @@ void get_write_object_raw(git_repository *repo, const shahex_t &obj, const std::
 	/* prepare final */
 	const char *repodir = git_repository_path(repo);
 	assert(repodir);
-	std::string objectpathdir = boost::filesystem::path(objectpath).parent_path().string();
+	const std::string objectpathdir = boost::filesystem::path(objectpath).parent_path().string();
 	assert(objectpathdir.find(".git") != std::string::npos);
 	boost::filesystem::create_directories(objectpathdir);
 	/* write final */
@@ -282,7 +287,6 @@ void get_write_object_raw(git_repository *repo, const shahex_t &obj, const std::
 
 std::vector<shahex_t> get_trees_writing_rec(PsCon *client, git_repository *repo, const std::string &tree)
 {
-	bool error = false;
 	std::vector<shahex_t> out;
 
 	get_write_object_raw(repo, tree, get_object(client, tree));
