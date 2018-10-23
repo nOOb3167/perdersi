@@ -14,6 +14,7 @@ from server import (config as server_config,
                     server_config_make_default,
                     server_run_prepare,
                     ServerRepoCtx)
+from subprocess import (run as subprocess_run)
 from typing import Callable, List, Set, Tuple
 from zlib import (decompress as zlib_decompress)
 
@@ -260,3 +261,8 @@ def test_checkout_head(
     #index.checkout()
     assert os_path_exists(str(rc.repodir.join(".git")))
     rc.repo.head.reset(master.commit, index=True, working_tree=True)
+
+def test_updater(
+    customopt_updater_exe: str
+):
+    subprocess_run(customopt_updater_exe, timeout=30, check=True)

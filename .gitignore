@@ -1,4 +1,4 @@
-/.coverage
+.coverage
 /cov_annotate
 /ansible/base.retry
 /ansible/se.retry

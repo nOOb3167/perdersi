@@ -397,7 +397,7 @@ int main(int argc, char **argv)
 
 	std::cout << "qq " << get_head(&client, "master") << std::endl;
 
-	return EXIT_FAILURE;
+	return EXIT_SUCCESS;
 }
 
 #endif /* _PS_UPDATER_TESTING */

@@ -20,11 +20,6 @@ if (WIN32)
 endif ()
 SET(PS_OPTS PUBLIC "/MT$<$<CONFIG:Debug>:d>")
 
-add_executable(foo EXCLUDE_FROM_ALL updater.cpp miniz/miniz.c)
-target_compile_options(foo ${PS_OPTS})
-target_include_directories(foo ${PS_INCS})
-target_link_libraries(foo ${PS_LIBS})
-
 add_executable(test updater.cpp miniz/miniz.c)
 target_compile_options(test ${PS_OPTS})
 target_compile_definitions(test PUBLIC _PS_UPDATER_TESTING)
@@ -36,8 +31,10 @@ find_package(Python3 REQUIRED)
 add_custom_target(Tests
 	COMMAND ${Python3_EXECUTABLE}
 		-m pytest --cov=. --cov-report term
-	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/../
+		--customopt_updater_exe=$<TARGET_FILE:test>
+	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/../files
 	COMMENT "Running Tests"
 )
+add_dependencies(Tests test)
 
 install(TARGETS test RUNTIME DESTINATION bin)
