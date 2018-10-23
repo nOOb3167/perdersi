@@ -11,8 +11,14 @@ find_package(Threads REQUIRED)
 find_package(Boost 1.66 REQUIRED COMPONENTS date_time filesystem regex)
 find_package(LibGit2 REQUIRED)
 add_executable(foo test.cpp miniz/miniz.c)
-target_link_libraries(foo Boost::boost Boost::date_time Boost::filesystem Boost::regex)
+target_link_libraries(foo Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking)
 target_link_libraries(foo Threads::Threads ${LIBGIT2_LIBRARIES} ${SHLWAPI_LIBRARIES})
+if (WIN32)
+	target_link_libraries(foo winhttp Rpcrt4.lib crypt32.lib)
+endif ()
+target_compile_options(foo
+	PUBLIC "/MT$<$<CONFIG:Debug>:d>"
+)
 target_include_directories(foo PUBLIC ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/miniz ${LIBGIT2_INCLUDE_DIR})
 install(TARGETS foo RUNTIME DESTINATION bin)
 

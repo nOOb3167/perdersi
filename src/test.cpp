@@ -1,8 +1,9 @@
 #include <cassert>
-#include <cstdlib>>
+#include <cstdlib>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
@@ -12,6 +13,9 @@
 
 using shahex_t = ::std::string;
 
+typedef ::std::unique_ptr<git_commit, void(*)(git_commit *)> unique_ptr_gitcommit;
+typedef ::std::unique_ptr<git_odb, void(*)(git_odb *)> unique_ptr_gitodb;
+typedef ::std::unique_ptr<git_signature, void(*)(git_signature *)> unique_ptr_gitsignature;
 typedef ::std::unique_ptr<git_tree, void(*)(git_tree *)> unique_ptr_gittree;
 
 namespace ns_git
@@ -41,7 +45,7 @@ std::string inflatebuf(const std::string &buf)
     if (inflateInit(&strm) != Z_OK)
         throw std::runtime_error("inflate init");
 
-	strm.avail_in = buf.size();
+	strm.avail_in = (unsigned int) buf.size();
 	strm.next_in = (Bytef *) buf.data();
 
 	result.reserve(2 * CHUNK);  // arbitrary preallocation
@@ -107,15 +111,38 @@ std::string hexstr_from_oid(const git_oid &oid)
 	return std::string(git_oid_tostr(buf, sizeof buf, &oid));
 }
 
-void tree_delete(git_tree * p)
+void commit_delete(git_commit *p) { if (p) git_commit_free(p); }
+void odb_delete(git_odb *p) { if (p) git_odb_free(p); }
+void sig_delete(git_signature *p) { if (p) git_signature_free(p); }
+void tree_delete(git_tree *p) { if (p) git_tree_free(p); }
+
+unique_ptr_gitcommit commit_lookup(git_repository *repo, const git_oid oid)
 {
-	if (p)
-		git_tree_free(p);
+	git_commit *p = nullptr;
+	if (!!git_commit_lookup(&p, repo, &oid))
+		throw std::runtime_error("commit lookup");
+	return unique_ptr_gitcommit(p, commit_delete);
+}
+
+unique_ptr_gitodb odb_from_repo(git_repository *repo)
+{
+	git_odb *odb = nullptr;
+	if (!!git_repository_odb(&odb, repo))
+		throw std::runtime_error("odb repository");
+	return unique_ptr_gitodb(odb, odb_delete);
+}
+
+unique_ptr_gitsignature sig_new_dummy()
+{
+	git_signature *sig = nullptr;
+	if (!! git_signature_new(&sig, "DummyName", "DummyEMail", 0, 0))
+		throw std::runtime_error("signature");
+	return unique_ptr_gitsignature(sig, sig_delete);
 }
 
 unique_ptr_gittree tree_lookup(git_repository *repo, const git_oid oid)
 {
-	git_tree *p = NULL;
+	git_tree *p = nullptr;
 	if (!!git_tree_lookup(&p, repo, &oid))
 		throw std::runtime_error("tree lookup");
 	return unique_ptr_gittree(p, tree_delete);
@@ -177,8 +204,9 @@ public:
 	res_t reqPost_(const std::string &path, const std::string &data)
 	{
 		res_t res = reqPost(path, data);
-		if (res.result_int != 200)
+		if (res.result_int() != 200)
 			throw PsConExc();
+		return res;
 	}
 
 	std::string m_host;
@@ -195,14 +223,14 @@ std::string get_object(PsCon *client, const std::string &objhex)
 {
 	std::string fst = objhex.substr(0, 2);
 	std::string snd = objhex.substr(2, std::string::npos);
-	std::string loose = client->reqPost_("/lowtech/objects/" + fst + "/" + snd, "").body;
+	std::string loose = client->reqPost_("/lowtech/objects/" + fst + "/" + snd, "").body();
 	return loose;
 	std::string treedata = ns_git::inflatebuf(loose);
 }
 
 std::string get_head(PsCon *client, const std::string &refname)
 {
-	std::string objhex = client->reqPost_("/lowtech/refs/heads/" + refname, "").body;
+	std::string objhex = client->reqPost_("/lowtech/refs/heads/" + refname, "").body();
 
 	if (objhex.size() != GIT_OID_HEXSZ)
 		throw PsConExc();
@@ -287,8 +315,36 @@ std::vector<shahex_t> get_blobs_writing(PsCon *client, git_repository *repo, con
 			}
 	}
 
-	for (const auto &elt : blobs) {
-	get_write_object_raw(repo, )
+	for (const auto &blob : blobs)
+		get_write_object_raw(repo, blob, get_object(client, blob));
+
+	return blobs;
+}
+
+shahex_t create_commit(git_repository *repo, const shahex_t &tree)
+{
+	unique_ptr_gitodb odb(ns_git::odb_from_repo(repo));
+	unique_ptr_gitsignature sig(ns_git::sig_new_dummy());
+	unique_ptr_gittree t(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)));
+
+	git_buf buf = {};
+	git_oid commit_oid_even_if_error = {};
+
+	if (!!git_commit_create_buffer(&buf, repo, sig.get(), sig.get(), "UTF-8", "Dummy", t.get(), 0, NULL))
+		throw PsConExc();
+ 
+	if (!!git_odb_write(&commit_oid_even_if_error, odb.get(), buf.ptr, buf.size, GIT_OBJ_COMMIT))
+		if (!git_odb_exists(odb.get(), &commit_oid_even_if_error))
+			throw PsConExc();
+
+	return ns_git::hexstr_from_oid(commit_oid_even_if_error);
+}
+
+void create_ref(git_repository *repo, const std::string &refname, const git_oid commit)
+{
+	git_reference *ref = NULL;
+	if (!! git_reference_create(&ref, repo, refname.c_str(), &commit, true, "DummyLogMessage"))
+		throw PsConExc();
 }
 
 int main(int argc, char **argv)
