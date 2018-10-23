@@ -8,19 +8,28 @@ list(APPEND CMAKE_MODULE_PATH
 )
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
+set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_STATIC_RUNTIME ON)
 find_package(Boost 1.66 REQUIRED COMPONENTS date_time filesystem regex)
 find_package(LibGit2 REQUIRED)
-add_executable(foo updater.cpp miniz/miniz.c)
-target_link_libraries(foo Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking)
-target_link_libraries(foo Threads::Threads ${LIBGIT2_LIBRARIES} ${SHLWAPI_LIBRARIES})
+
+SET(PS_INCS PUBLIC ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/miniz ${LIBGIT2_INCLUDE_DIR})
+SET(PS_LIBS Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking Threads::Threads ${LIBGIT2_LIBRARIES} ${SHLWAPI_LIBRARIES})
 if (WIN32)
-	target_link_libraries(foo winhttp Rpcrt4.lib crypt32.lib)
+	SET(PS_LIBS ${PS_LIBS} winhttp Rpcrt4 crypt32)
 endif ()
-target_compile_options(foo
-	PUBLIC "/MT$<$<CONFIG:Debug>:d>"
-)
-target_include_directories(foo PUBLIC ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/miniz ${LIBGIT2_INCLUDE_DIR})
-install(TARGETS foo RUNTIME DESTINATION bin)
+SET(PS_OPTS PUBLIC "/MT$<$<CONFIG:Debug>:d>")
+
+add_executable(foo EXCLUDE_FROM_ALL updater.cpp miniz/miniz.c)
+target_compile_options(foo ${PS_OPTS})
+target_include_directories(foo ${PS_INCS})
+target_link_libraries(foo ${PS_LIBS})
+
+add_executable(test updater.cpp miniz/miniz.c)
+target_compile_options(test ${PS_OPTS})
+target_compile_definitions(test PUBLIC _PS_UPDATER_TESTING)
+target_include_directories(test ${PS_INCS})
+target_link_libraries(test ${PS_LIBS})
 
 find_package(Python3 REQUIRED)
 
@@ -30,3 +39,5 @@ add_custom_target(Tests
 	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/../
 	COMMENT "Running Tests"
 )
+
+install(TARGETS test RUNTIME DESTINATION bin)

@@ -7,7 +7,9 @@ from flask import (current_app as flask_current_app,
                    request as flask_request,
                    session as flask_session)
 import git
-import os
+from os import (name as os_name,
+                urandom as os_urandom)
+
 import urllib.parse
 from werkzeug.wsgi import (wrap_file as werkzeug_wsgi_wrap_file)
 
@@ -48,7 +50,7 @@ class ServerRepoCtx:
     def create_ensure(cls, repodir):
         try:
             repo = git.Repo(repodir)
-        except git.exc.InvalidRepositoryError:
+        except (git.exc.InvalidGitRepositoryError, git.exc.NoSuchPathError):
             repo = git.Repo.init(repodir)
         return ServerRepoCtx(repodir, repo)
 
@@ -73,8 +75,7 @@ def refs_heads(refname_p):
     tree = commit.tree
     return flask_jsonify({ "tree": tree.hexsha })
 
-@server_route_api_post("/object/<objhex>")
-def object(objhex):
+def _server_object(objhex):
     objbin = bytes.fromhex(objhex)
     rc = server_repo_ctx_get()
     obj = git.Object(rc.repo, objbin)
@@ -84,6 +85,15 @@ def object(objhex):
     fileiter = werkzeug_wsgi_wrap_file(flask_request.environ, objectfile)
     return flask_current_app.response_class(fileiter, content_type="application/octet-stream", direct_passthrough=True)
 
+
+@server_route_api_post("/object/<objhex>")
+def object(objhex):
+	return _server_object(objhex)
+
+@server_route_api_post("/object/<objhex_a>/<objhex_b>")
+def object2(objhex_a, objhex_b):
+	return object(objhex_a + objhex_b)
+	
 @server_route_api_post("/sub/")
 def qqq():
     server_check_csrf()
@@ -105,12 +115,12 @@ def server_config_make_default():
         "LISTEN_PORT": "5201",
         "ORIGIN_DOMAIN_APP": "localhost.localdomain",
         "ORIGIN_DOMAIN_API": "api.localhost.localdomain",
-        "REPO_DIR": "/usr/local/perdersi/repo_s"
+        "REPO_DIR": "/usr/local/perdersi/repo_s" if os_name != 'nt' else "./repo_s"
     }
 
 def server_config_flask():
     global config, server_app
-    server_app.secret_key = base64.b32encode(os.urandom(24)).decode("UTF-8")
+    server_app.secret_key = base64.b32encode(os_urandom(24)).decode("UTF-8")
     server_app.config["SERVER_NAME"] = config["ORIGIN_DOMAIN_APP"] + ":" + config["LISTEN_PORT"]
     server_app.config['TESTING'] = "TESTING" in config and config["TESTING"]
 

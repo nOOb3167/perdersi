@@ -11,10 +11,14 @@
 #include <git2.h>
 #include <miniz.h>
 
+template<typename T>
+using sp = ::std::shared_ptr<T>;
+
 using shahex_t = ::std::string;
 
 typedef ::std::unique_ptr<git_commit, void(*)(git_commit *)> unique_ptr_gitcommit;
 typedef ::std::unique_ptr<git_odb, void(*)(git_odb *)> unique_ptr_gitodb;
+typedef ::std::unique_ptr<git_repository, void(*)(git_repository *)> unique_ptr_gitrepository;
 typedef ::std::unique_ptr<git_signature, void(*)(git_signature *)> unique_ptr_gitsignature;
 typedef ::std::unique_ptr<git_tree, void(*)(git_tree *)> unique_ptr_gittree;
 
@@ -123,6 +127,7 @@ std::string hexstr_from_oid(const git_oid &oid)
 
 void commit_delete(git_commit *p) { if (p) git_commit_free(p); }
 void odb_delete(git_odb *p) { if (p) git_odb_free(p); }
+void repo_delete(git_repository *p) { if (p) git_repository_free(p); }
 void sig_delete(git_signature *p) { if (p) git_signature_free(p); }
 void tree_delete(git_tree *p) { if (p) git_tree_free(p); }
 
@@ -140,6 +145,14 @@ unique_ptr_gitodb odb_from_repo(git_repository *repo)
 	if (!!git_repository_odb(&odb, repo))
 		throw std::runtime_error("odb repository");
 	return unique_ptr_gitodb(odb, odb_delete);
+}
+
+unique_ptr_gitrepository repository_open(std::string path)
+{
+	git_repository *p = NULL;
+	if (!! git_repository_open(&p, path.c_str()))
+		throw std::runtime_error("repository");
+	return unique_ptr_gitrepository(p, repo_delete);
 }
 
 unique_ptr_gitsignature sig_new_dummy()
@@ -227,17 +240,15 @@ public:
 	tcp::socket m_socket;
 };
 
-std::string get_head(PsCon *client, const std::string &refname);
-
 std::string get_object(PsCon *client, const std::string &objhex)
 {
-	std::string loose = client->reqPost_("/lowtech/objects/" + objhex.substr(0, 2) + "/" + objhex.substr(2), "").body();
+	std::string loose = client->reqPost_("/object/" + objhex.substr(0, 2) + "/" + objhex.substr(2), "").body();
 	return loose;
 }
 
-std::string get_head(PsCon *client, const std::string &refname)
+shahex_t get_head(PsCon *client, const std::string &refname)
 {
-	std::string objhex = client->reqPost_("/lowtech/refs/heads/" + refname, "").body();
+	shahex_t objhex = client->reqPost_("/refs/heads/" + refname, "").body();
 
 	if (objhex.size() != GIT_OID_HEXSZ)
 		throw PsConExc();
@@ -351,6 +362,8 @@ void create_ref(git_repository *repo, const std::string &refname, const git_oid 
 		throw PsConExc();
 }
 
+#ifndef _PS_UPDATER_TESTING
+
 int main(int argc, char **argv)
 {
   git_libgit2_init();
@@ -359,3 +372,42 @@ int main(int argc, char **argv)
   
   return EXIT_SUCCESS;
 }
+
+#else /* _PS_UPDATER_TESTING */
+
+unique_ptr_gitrepository _git_repository_ensure(const std::string &repopath)
+{
+	git_repository *repo = NULL;
+	git_repository_init_options init_options = GIT_REPOSITORY_INIT_OPTIONS_INIT;
+	init_options.flags = GIT_REPOSITORY_INIT_NO_REINIT | GIT_REPOSITORY_INIT_MKDIR;
+	assert(init_options.version == 1);
+
+	int err = git_repository_init_ext(&repo, repopath.c_str(), &init_options);
+	if (!!err && err == GIT_EEXISTS)
+		return unique_ptr_gitrepository(ns_git::repository_open(repopath.c_str()));
+	if (!!err)
+		throw std::runtime_error("ensure repository init");
+
+	return unique_ptr_gitrepository(repo, ns_git::repo_delete);
+}
+
+int main(int argc, char **argv)
+{
+	git_libgit2_init();
+
+	boost::filesystem::path tempdir = (boost::filesystem::temp_directory_path() / "ps_updater" / boost::filesystem::unique_path());
+	boost::filesystem::path repodir = tempdir / "repo";
+	boost::filesystem::create_directories(repodir);
+
+	std::cout << "repodir: " << repodir.string() << std::endl;
+
+	unique_ptr_gitrepository repo(_git_repository_ensure(repodir.string()));
+
+	PsCon client("api.localhost.localdomain", "5201");
+
+	std::cout << "qq " << get_head(&client, "master") << std::endl;
+
+	return EXIT_FAILURE;
+}
+
+#endif /* _PS_UPDATER_TESTING */
