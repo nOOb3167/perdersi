@@ -34,10 +34,15 @@ class CsrfExc(Exception):
 def server_check_csrf():
         if "Origin" not in flask_request.headers:
             raise CsrfExc()
-        u1 = "http://" + config["ORIGIN_DOMAIN_APP"] + ":" + config["LISTEN_PORT"]
-        u2 = flask_request.headers['Origin']
-        if u1 != u2:
-            raise CsrfExc()
+        allowed = [
+			"http://" + config["ORIGIN_DOMAIN_API"] + ":" + config["LISTEN_PORT"],
+            "http://" + config["ORIGIN_DOMAIN_APP"] + ":" + config["LISTEN_PORT"],
+        ]
+        incoming = flask_request.headers['Origin'].split(" ")
+		for i in incoming:
+			if i in allowed:
+				return
+		raise CsrfExc()
 
 def server_compare_urlparse_csrf(u1, u2):
         return (u1.scheme == u2.scheme) and (u1.netloc == u2.netloc)

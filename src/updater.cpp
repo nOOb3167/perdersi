@@ -8,6 +8,7 @@
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/regex.hpp>
 #include <git2.h>
 #include <miniz.h>
 
@@ -92,23 +93,12 @@ std::string inflatebuf(const std::string &buf)
 
 ObjectDataInfo get_object_data_info(const std::string &data)
 {
-	/* format: "(type)(space)(number)(NULL)"
-	   format: "[:alpha:]+ [:digit:]+\0" */
-	/* skip past type */
-	size_t spc;
-	if ((spc = data.find_first_of(' ', 0)) == std::string::npos)
-		throw std::runtime_error("hdr spc");
-	/* skip past space and size */
-	if (data.find_first_not_of("0123456789", spc + 1) == std::string::npos)
-		throw std::runtime_error("hdr num");
-	if (data.at(data.find_first_not_of("0123456789", spc + 1)) != '\0')
-		throw std::runtime_error("hdr null");
-
-	return ObjectDataInfo(
-		data,
-		data.substr(0, data.find_first_of(' ', 0)),       /* type */
-		data.find_first_not_of("0123456789", spc + 1) + 1 /* data_offset */
-	);
+	/* format: "(type)(space)(number)(NULL)" */
+	static boost::regex expr("([[:alpha:]]+) ([[:digit:]]+)\000");
+	boost::cmatch what;
+	if (! boost::regex_search(data.c_str(), what, expr, boost::match_continuous))
+		throw std::runtime_error("hdr regex");
+	return ObjectDataInfo(data, what[1], what[0].second - data.c_str());
 }
 
 git_oid oid_from_hexstr(const std::string &str)
