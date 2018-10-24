@@ -264,10 +264,18 @@ def test_checkout_head(
 def test_updater(
     customopt_python_exe: str,
     customopt_updater_exe: str,
+    rc_s: ServerRepoCtx,
     client: flask.testing.FlaskClient
 ):
-    import subprocess
-    p0 = subprocess.Popen([customopt_python_exe, "server.py"])
+    import json, os, subprocess
+    
+    _config = server_config_make_default()
+    _config["REPO_DIR"] = str(rc_s.repodir)
+    _config["TESTING"] = True
+    
+    env = os.environ.copy()
+    env["PS_CONFIG"] = json.dumps(_config)
+    p0 = subprocess.Popen([customopt_python_exe, "server.py"], env=env)
     p1 = subprocess.Popen([customopt_updater_exe])
     try: p1.communicate(timeout=5)
     except: pass

@@ -1,3 +1,4 @@
+print('hello world')
 import base64
 import flask
 from flask import (current_app as flask_current_app,
@@ -111,15 +112,26 @@ def server_config_make_default():
         "REPO_DIR": "/usr/local/perdersi/repo_s" if os_name != 'nt' else "./repo_s"
     }
 
+def server_config_make_augmented():
+    conf = server_config_make_default()
+    try:
+        import json, os
+        x = json.loads(os.environ["PS_CONFIG"])
+        for k in x:
+            conf[k] = x[k]
+    except:
+        pass
+    return conf
+
 def server_config_flask():
     global config, server_app
     server_app.secret_key = base64.b32encode(os_urandom(24)).decode("UTF-8")
     server_app.config["SERVER_NAME"] = config["ORIGIN_DOMAIN_APP"] + ":" + config["LISTEN_PORT"]
     server_app.config['TESTING'] = "TESTING" in config and config["TESTING"]
 
-def server_run_prepare(conf: confdict = None):
+def server_run_prepare(conf: confdict = server_config_make_default()):
     global config
-    config = conf if conf else server_config_make_default()
+    config = conf
     server_config_flask()
 
 def server_run():
@@ -127,5 +139,5 @@ def server_run():
     server_app.run(host = config["LISTEN_HOST"], port = config["LISTEN_PORT"])
 
 if __name__ == "__main__":
-    server_run_prepare()
+    server_run_prepare(server_config_make_augmented())
     server_run()
