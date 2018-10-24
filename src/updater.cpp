@@ -401,15 +401,11 @@ int main(int argc, char **argv)
 	pt_t t = readconfig();
 	std::string repodir = t.get<std::string>("REPO_DIR");
 
-	//boost::filesystem::path tempdir = (boost::filesystem::temp_directory_path() / "ps_updater" / boost::filesystem::unique_path());
-	//boost::filesystem::path repodir = tempdir / "repo";
-	//boost::filesystem::create_directories(repodir);
-
 	std::cout << "repodir: " << repodir << std::endl;
 
 	unique_ptr_gitrepository repo(_git_repository_ensure(repodir));
 
-	PsCon client("api.localhost.localdomain", "5201");
+	PsCon client(t.get<std::string>("ORIGIN_DOMAIN_API"), t.get<std::string>("LISTEN_PORT"));
 
 	std::cout << "qq " << get_head(&client, "master") << std::endl;
 
