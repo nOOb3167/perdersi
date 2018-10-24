@@ -110,7 +110,8 @@ def server_config_make_default():
         "LISTEN_PORT": "5201",
         "ORIGIN_DOMAIN_APP": "localhost.localdomain",
         "ORIGIN_DOMAIN_API": "api.localhost.localdomain",
-        "REPO_DIR": "/usr/local/perdersi/repo_s" if os_name != 'nt' else "./repo_s"
+        "REPO_DIR": "/usr/local/perdersi/repo_s" if os_name != 'nt' else "./repo_s",
+        "TESTING": False,
     }
 
 def server_config_make_augmented():
