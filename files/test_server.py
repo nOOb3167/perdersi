@@ -273,6 +273,7 @@ def test_checkout_head(
     rc.repo.head.reset(master.commit, index=True, working_tree=True)
 
 def test_updater(
+    customopt_debug_wait: str,
     customopt_python_exe: str,
     customopt_updater_exe: str,
     rc: ServerRepoCtx,
@@ -283,7 +284,7 @@ def test_updater(
 
     p0 = subprocess.Popen([customopt_python_exe, "server.py"], env=_testing_make_server_config_env(repodir=rc_s.repodir))
     p1 = subprocess.Popen([customopt_updater_exe], env=_testing_make_server_config_env(repodir=rc.repodir))
-    try: p1.communicate(timeout=10)
+    try: p1.communicate(timeout=(None if customopt_debug_wait == "ON" else 10))
     except: pass
     try: p0.kill()
     except: pass

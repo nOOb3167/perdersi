@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdlib>
+#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -14,6 +15,10 @@
 #include <git2.h>
 #include <miniz.h>
 
+#ifdef _PS_DEBUG_WAIT
+#include <windows.h>
+#endif
+
 template<typename T>
 using sp = ::std::shared_ptr<T>;
 
@@ -26,10 +31,25 @@ typedef ::std::unique_ptr<git_repository, void(*)(git_repository *)> unique_ptr_
 typedef ::std::unique_ptr<git_signature, void(*)(git_signature *)> unique_ptr_gitsignature;
 typedef ::std::unique_ptr<git_tree, void(*)(git_tree *)> unique_ptr_gittree;
 
+void waitdebug()
+{
+#ifdef _PS_DEBUG_WAIT
+	while (true) {
+		if (IsDebuggerPresent()) {
+			__debugbreak();
+			break;
+		}
+		Sleep(1000);
+	}
+#endif
+}
+
 pt_t readconfig()
 {
 	if (! getenv("PS_CONFIG"))
 		throw std::runtime_error("config");
+	// FIXME: informational output
+	std::cout << "config: " << getenv("PS_CONFIG") << std::endl;
 	std::stringstream ss(getenv("PS_CONFIG"));
 	boost::property_tree::ptree pt;
 	boost::property_tree::json_parser::read_json(ss, pt);
@@ -398,6 +418,8 @@ int main(int argc, char **argv)
 {
 	git_libgit2_init();
 
+	waitdebug();
+
 	pt_t t = readconfig();
 	std::string repodir = t.get<std::string>("REPO_DIR");
 
@@ -407,7 +429,10 @@ int main(int argc, char **argv)
 
 	PsCon client(t.get<std::string>("ORIGIN_DOMAIN_API"), t.get<std::string>("LISTEN_PORT"));
 
-	std::cout << "qq " << get_head(&client, "master") << std::endl;
+	shahex_t head = get_head(&client, "master");
+	std::vector<shahex_t> trees = get_trees_writing(&client, repo.get(), head);
+
+	std::cout << "qq " << head << std::endl;
 
 	return EXIT_SUCCESS;
 }
