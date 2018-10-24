@@ -87,10 +87,6 @@ def object(objhex_a, objhex_b):
         content_type="application/octet-stream",
         direct_passthrough=True)
 
-@server_route_api_post("/kill")
-def kill():
-    raise RuntimeError("PS_SERVER_GOING_DOWN")
-        
 @server_route_api_post("/sub/")
 def qqq():
     server_check_csrf()
