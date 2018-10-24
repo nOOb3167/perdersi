@@ -1,4 +1,3 @@
-print('hello world')
 import base64
 import flask
 from flask import (current_app as flask_current_app,
@@ -10,7 +9,8 @@ from flask import (current_app as flask_current_app,
 import git
 from os import (name as os_name,
                 urandom as os_urandom)
-
+import pathlib
+from pathlib import (Path as pathlib_Path)
 import urllib.parse
 from werkzeug.wsgi import (wrap_file as werkzeug_wsgi_wrap_file)
 
@@ -49,11 +49,11 @@ def server_compare_urlparse_csrf(u1, u2):
         return (u1.scheme == u2.scheme) and (u1.netloc == u2.netloc)
 
 class ServerRepoCtx:
-    def __init__(self, repodir, repo):
-        self.repodir = repodir
+    def __init__(self, repodir: str, repo: git.Repo):
+        self.repodir = pathlib_Path(repodir)
         self.repo = repo
     @classmethod
-    def create_ensure(cls, repodir):
+    def create_ensure(cls, repodir: str):
         try:
             repo = git.Repo(repodir)
         except (git.exc.InvalidGitRepositoryError, git.exc.NoSuchPathError):
@@ -82,7 +82,8 @@ def refs_heads(refname):
 
 @server_route_api_post("/objects/<objhex_a>/<objhex_b>")
 def object(objhex_a, objhex_b):
-    objectpath = server_repo_ctx_get().repodir.join(".git/objects/").join(objhex_a).join("/").join(objhex_b)
+    repopath: pathlib.Path = server_repo_ctx_get().repodir
+    objectpath: pathlib.Path = repopath / ".git" / "objects" / objhex_a / objhex_b
     return flask_current_app.response_class(
         werkzeug_wsgi_wrap_file(flask_request.environ, open(str(objectpath), mode="rb")),
         content_type="application/octet-stream",

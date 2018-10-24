@@ -3,11 +3,13 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <sstream>
 #include <utility>
 
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/property_tree/json_parser.hpp>
 #include <boost/regex.hpp>
 #include <git2.h>
 #include <miniz.h>
@@ -15,6 +17,7 @@
 template<typename T>
 using sp = ::std::shared_ptr<T>;
 
+using pt_t = ::boost::property_tree::ptree;
 using shahex_t = ::std::string;
 
 typedef ::std::unique_ptr<git_commit, void(*)(git_commit *)> unique_ptr_gitcommit;
@@ -22,6 +25,16 @@ typedef ::std::unique_ptr<git_odb, void(*)(git_odb *)> unique_ptr_gitodb;
 typedef ::std::unique_ptr<git_repository, void(*)(git_repository *)> unique_ptr_gitrepository;
 typedef ::std::unique_ptr<git_signature, void(*)(git_signature *)> unique_ptr_gitsignature;
 typedef ::std::unique_ptr<git_tree, void(*)(git_tree *)> unique_ptr_gittree;
+
+pt_t readconfig()
+{
+	if (! getenv("PS_CONFIG"))
+		throw std::runtime_error("config");
+	std::stringstream ss(getenv("PS_CONFIG"));
+	boost::property_tree::ptree pt;
+	boost::property_tree::json_parser::read_json(ss, pt);
+	return pt;
+}
 
 namespace ns_git
 {
@@ -385,13 +398,16 @@ int main(int argc, char **argv)
 {
 	git_libgit2_init();
 
-	boost::filesystem::path tempdir = (boost::filesystem::temp_directory_path() / "ps_updater" / boost::filesystem::unique_path());
-	boost::filesystem::path repodir = tempdir / "repo";
-	boost::filesystem::create_directories(repodir);
+	pt_t t = readconfig();
+	std::string repodir = t.get<std::string>("REPO_DIR");
 
-	std::cout << "repodir: " << repodir.string() << std::endl;
+	//boost::filesystem::path tempdir = (boost::filesystem::temp_directory_path() / "ps_updater" / boost::filesystem::unique_path());
+	//boost::filesystem::path repodir = tempdir / "repo";
+	//boost::filesystem::create_directories(repodir);
 
-	unique_ptr_gitrepository repo(_git_repository_ensure(repodir.string()));
+	std::cout << "repodir: " << repodir << std::endl;
+
+	unique_ptr_gitrepository repo(_git_repository_ensure(repodir));
 
 	PsCon client("api.localhost.localdomain", "5201");
 

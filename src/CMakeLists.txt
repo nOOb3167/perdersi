@@ -17,12 +17,12 @@ SET(PS_INCS PUBLIC ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/miniz ${LIBGI
 SET(PS_LIBS Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking Threads::Threads ${LIBGIT2_LIBRARIES} ${SHLWAPI_LIBRARIES})
 if (WIN32)
 	SET(PS_LIBS ${PS_LIBS} winhttp Rpcrt4 crypt32)
+	SET(PS_OPTS PUBLIC "/MT$<$<CONFIG:Debug>:d>")
 endif ()
-SET(PS_OPTS PUBLIC "/MT$<$<CONFIG:Debug>:d>")
 
 add_executable(test updater.cpp miniz/miniz.c)
 target_compile_options(test ${PS_OPTS})
-target_compile_definitions(test PUBLIC _PS_UPDATER_TESTING)
+target_compile_definitions(test PUBLIC _PS_UPDATER_TESTING _CRT_SECURE_NO_WARNINGS)
 target_include_directories(test ${PS_INCS})
 target_link_libraries(test ${PS_LIBS})
 

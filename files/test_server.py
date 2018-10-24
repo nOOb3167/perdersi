@@ -7,6 +7,8 @@ from os import (makedirs as os_makedirs)
 from os.path import (dirname as os_path_dirname,
                      exists as os_path_exists,
                      isdir as os_path_isdir)
+import pathlib
+from pathlib import (Path as pathlib_Path)
 import pytest
 from re import (fullmatch as re_fullmatch)
 import server
@@ -32,20 +34,29 @@ class RetCodeErr(Exception):
 class RetCode500(RetCodeErr):
     pass
 
+def _testing_make_server_config(repodir: pathlib.Path):
+    _config = server_config_make_default()
+    _config["REPO_DIR"] = str(repodir)
+    _config["TESTING"] = True
+    return _config
+
+def _testing_make_server_config_env(repodir: pathlib.Path):
+    import json, os
+    env = os.environ.copy()
+    env["PS_CONFIG"] = json.dumps(_testing_make_server_config(repodir))
+    return env
+
 @pytest.fixture(scope="session")
 def repodir(tmpdir_factory):
-    return tmpdir_factory.mktemp("repo")
+    return pathlib_Path(tmpdir_factory.mktemp("repo"))
 
 @pytest.fixture(scope="session")
 def repodir_s(tmpdir_factory):
-    return tmpdir_factory.mktemp("repo_s")
+    return pathlib_Path(tmpdir_factory.mktemp("repo_s"))
 
 @pytest.fixture(scope="session")
 def server_run_prepare_for_testing(repodir_s):
-    _config = server_config_make_default()
-    _config["REPO_DIR"] = repodir_s
-    _config["TESTING"] = True
-    server_run_prepare(_config)
+    server_run_prepare(_testing_make_server_config(repodir_s))
 
 @pytest.fixture(scope="session")
 def rc(repodir) -> ServerRepoCtx:
@@ -61,7 +72,7 @@ def rc_s(repodir_s) -> ServerRepoCtx:
     ffs = [("a.txt", b"aaa"),
            ("d/b.txt", b"bbb")]
     for ff in ffs:
-        with _file_open_mkdirp(str(rc.repodir.join(ff[0]))) as f:
+        with _file_open_mkdirp(str(rc.repodir.joinpath(ff[0]))) as f:
             f.write(ff[1])
     for ff in ffs:
         rc.repo.index.add([ff[0]])
@@ -258,26 +269,21 @@ def test_checkout_head(
     # FIXME: use force=True ?
     #index: git.IndexFile = git.IndexFile.from_tree(rc.repo, master.commit.tree)
     #index.checkout()
-    assert os_path_exists(str(rc.repodir.join(".git")))
+    assert os_path_exists(str(rc.repodir.joinpath(".git")))
     rc.repo.head.reset(master.commit, index=True, working_tree=True)
 
 def test_updater(
     customopt_python_exe: str,
     customopt_updater_exe: str,
+    rc: ServerRepoCtx,
     rc_s: ServerRepoCtx,
     client: flask.testing.FlaskClient
 ):
-    import json, os, subprocess
-    
-    _config = server_config_make_default()
-    _config["REPO_DIR"] = str(rc_s.repodir)
-    _config["TESTING"] = True
-    
-    env = os.environ.copy()
-    env["PS_CONFIG"] = json.dumps(_config)
-    p0 = subprocess.Popen([customopt_python_exe, "server.py"], env=env)
-    p1 = subprocess.Popen([customopt_updater_exe])
-    try: p1.communicate(timeout=5)
+    import subprocess
+
+    p0 = subprocess.Popen([customopt_python_exe, "server.py"], env=_testing_make_server_config_env(repodir=rc_s.repodir))
+    p1 = subprocess.Popen([customopt_updater_exe], env=_testing_make_server_config_env(repodir=rc.repodir))
+    try: p1.communicate(timeout=10)
     except: pass
     try: p0.kill()
     except: pass
