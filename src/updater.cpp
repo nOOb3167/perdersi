@@ -232,7 +232,7 @@ public:
 
 std::string get_object(PsCon *client, const std::string &objhex)
 {
-	std::string loose = client->reqPost_("/object/" + objhex.substr(0, 2) + "/" + objhex.substr(2), "").body();
+	std::string loose = client->reqPost_("/objects/" + objhex.substr(0, 2) + "/" + objhex.substr(2), "").body();
 	return loose;
 }
 
@@ -268,7 +268,7 @@ void get_write_object_raw(git_repository *repo, const shahex_t &obj, const std::
 	assert(!!git_repository_path(repo));
 	/* get temp and final path */
 	const std::string temppath = (boost::filesystem::temp_directory_path() / boost::filesystem::unique_path()).string();
-	const std::string objectpath = std::string(git_repository_path(repo)) + "/objects/" + obj.substr(0, 2) + "/" + obj.substr(2, std::string::npos);
+	const std::string objectpath = std::string(git_repository_path(repo)) + "/objects/" + obj.substr(0, 2) + "/" + obj.substr(2);
 	/* write temp */
 	std::ofstream ff(temppath, std::ios::out | std::ios::trunc | std::ios::binary);
 	ff.write(objloose.data(), objloose.size());

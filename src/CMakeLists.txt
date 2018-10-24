@@ -31,6 +31,7 @@ find_package(Python3 REQUIRED)
 add_custom_target(Tests
 	COMMAND ${Python3_EXECUTABLE}
 		-m pytest --cov=. --cov-report term
+		--customopt_python_exe=${Python3_EXECUTABLE}
 		--customopt_updater_exe=$<TARGET_FILE:test>
 	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/../files
 	COMMENT "Running Tests"

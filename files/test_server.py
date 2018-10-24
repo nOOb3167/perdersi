@@ -8,13 +8,13 @@ from os.path import (dirname as os_path_dirname,
                      exists as os_path_exists,
                      isdir as os_path_isdir)
 import pytest
+from re import (fullmatch as re_fullmatch)
 import server
 from server import (config as server_config,
                     server_app,
                     server_config_make_default,
                     server_run_prepare,
                     ServerRepoCtx)
-from subprocess import (run as subprocess_run)
 from typing import Callable, List, Set, Tuple
 from zlib import (decompress as zlib_decompress)
 
@@ -108,15 +108,14 @@ def _get_master_tree_hex(
     client: flask.testing.FlaskClient
 ) -> shahex:
     rv = _req_post(client, "/refs/heads/master", "")
-    r: dict = json_loads(rv.data)
-    assert type(r["tree"]) == str
-    return r["tree"]
+    assert re_fullmatch("[0-9a-fA-F]{40}", rv.data.decode("UTF-8"))
+    return rv.data.decode("UTF-8")
 
 def _get_object(
     client: flask.testing.FlaskClient,
     obj: shahex
 ) -> bytes:
-    rv = _req_post(client, "/object/" + obj, "")
+    rv = _req_post(client, "/objects/" + obj[:2] + "/" + obj[2:], "")
     objloose: bytes = rv.data
     return objloose
 
@@ -263,6 +262,19 @@ def test_checkout_head(
     rc.repo.head.reset(master.commit, index=True, working_tree=True)
 
 def test_updater(
-    customopt_updater_exe: str
+    customopt_python_exe: str,
+    customopt_updater_exe: str,
+    client: flask.testing.FlaskClient
 ):
-    subprocess_run(customopt_updater_exe, timeout=30, check=True)
+    import subprocess
+    p0 = subprocess.Popen([customopt_python_exe, "server.py"])
+    p1 = subprocess.Popen([customopt_updater_exe])
+    try: p1.communicate(timeout=5)
+    except: pass
+    try: p0.kill()
+    except: pass
+    try: p1.kill()
+    except: pass
+    
+    if p1.returncode != 0:
+        raise RetCodeErr()

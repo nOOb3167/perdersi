@@ -71,34 +71,26 @@ def server_repo_ctx_teardown(err):
 def server_route_api_post(path):
     return server_app.route(path, subdomain="api", methods=["POST"])
 
-@server_route_api_post("/refs/heads/<refname_p>")
-def refs_heads(refname_p):
-    refname = "refs/heads/" + refname_p
-    rc = server_repo_ctx_get()
-    ref = git.Reference(rc.repo, refname)
+@server_route_api_post("/refs/heads/<refname>")
+def refs_heads(refname):
+    ref = git.Reference(server_repo_ctx_get().repo, "refs/heads/" + refname)
     commit = ref.commit
     tree = commit.tree
-    return flask_jsonify({ "tree": tree.hexsha })
+    #return flask_jsonify({ "tree": tree.hexsha })
+    return tree.hexsha
 
-def _server_object(objhex):
-    objbin = bytes.fromhex(objhex)
-    rc = server_repo_ctx_get()
-    obj = git.Object(rc.repo, objbin)
-    objectsdir = rc.repodir.join(".git/objects/")
-    objectpath = objectsdir.join(objhex[:2]).join("/").join(objhex[2:])
-    objectfile = open(str(objectpath), mode="rb")
-    fileiter = werkzeug_wsgi_wrap_file(flask_request.environ, objectfile)
-    return flask_current_app.response_class(fileiter, content_type="application/octet-stream", direct_passthrough=True)
+@server_route_api_post("/objects/<objhex_a>/<objhex_b>")
+def object(objhex_a, objhex_b):
+    objectpath = server_repo_ctx_get().repodir.join(".git/objects/").join(objhex_a).join("/").join(objhex_b)
+    return flask_current_app.response_class(
+        werkzeug_wsgi_wrap_file(flask_request.environ, open(str(objectpath), mode="rb")),
+        content_type="application/octet-stream",
+        direct_passthrough=True)
 
-
-@server_route_api_post("/object/<objhex>")
-def object(objhex):
-	return _server_object(objhex)
-
-@server_route_api_post("/object/<objhex_a>/<objhex_b>")
-def object2(objhex_a, objhex_b):
-	return object(objhex_a + objhex_b)
-	
+@server_route_api_post("/kill")
+def kill():
+    raise RuntimeError("PS_SERVER_GOING_DOWN")
+        
 @server_route_api_post("/sub/")
 def qqq():
     server_check_csrf()
