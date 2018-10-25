@@ -28,6 +28,7 @@ using sp = ::std::shared_ptr<T>;
 using pt_t = ::boost::property_tree::ptree;
 using shahex_t = ::std::string;
 
+typedef ::std::unique_ptr<git_blob, void(*)(git_blob *)> unique_ptr_gitblob;
 typedef ::std::unique_ptr<git_commit, void(*)(git_commit *)> unique_ptr_gitcommit;
 typedef ::std::unique_ptr<git_odb, void(*)(git_odb *)> unique_ptr_gitodb;
 typedef ::std::unique_ptr<git_repository, void(*)(git_repository *)> unique_ptr_gitrepository;
@@ -154,11 +155,20 @@ git_otype otype_from_type(const std::string &type)
 	return tbl[type];
 }
 
+void blob_delete(git_blob *p) { if (p) git_blob_free(p); }
 void commit_delete(git_commit *p) { if (p) git_commit_free(p); }
 void odb_delete(git_odb *p) { if (p) git_odb_free(p); }
 void repo_delete(git_repository *p) { if (p) git_repository_free(p); }
 void sig_delete(git_signature *p) { if (p) git_signature_free(p); }
 void tree_delete(git_tree *p) { if (p) git_tree_free(p); }
+
+unique_ptr_gitblob blob_lookup(git_repository *repo, const git_oid oid)
+{
+	git_blob *p = nullptr;
+	if (!!git_blob_lookup(&p, repo, &oid))
+		throw std::runtime_error("blob lookup");
+	return unique_ptr_gitblob(p, blob_delete);
+}
 
 unique_ptr_gitcommit commit_lookup(git_repository *repo, const git_oid oid)
 {
@@ -383,6 +393,17 @@ std::vector<shahex_t> get_blobs_writing(PsCon *client, git_repository *repo, con
 	return blobs;
 }
 
+std::string content_tree_entry_blob(git_repository *repo, const shahex_t &tree, const std::string &entry)
+{
+	unique_ptr_gittree t(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)));
+	const git_tree_entry *e = git_tree_entry_byname(t.get(), entry.c_str());
+	if (!e || git_tree_entry_filemode(e) != GIT_FILEMODE_BLOB && git_tree_entry_filemode(e) != GIT_FILEMODE_BLOB_EXECUTABLE)
+		throw PsConExc();
+	unique_ptr_gitblob b(ns_git::blob_lookup(repo, *git_tree_entry_id(e)));
+	std::string content((const char *)git_blob_rawcontent(b.get()), (size_t)git_blob_rawsize(b.get()));
+	return content;
+}
+
 shahex_t create_commit(git_repository *repo, const shahex_t &tree)
 {
 	unique_ptr_gitodb odb(ns_git::odb_from_repo(repo));
@@ -500,6 +521,8 @@ int main(int argc, char **argv)
 	_git_checkout_obj(repo.get(), head, chkoutdir.string());
 
 	std::cout << "head: " << head << std::endl;
+
+	assert(content_tree_entry_blob(repo.get(), head, "a.txt") == "aaa");
 
 	return EXIT_SUCCESS;
 }
