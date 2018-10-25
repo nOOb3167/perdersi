@@ -6,7 +6,9 @@
 #include <string>
 #include <sstream>
 #include <utility>
+#include <vector>
 
+#include <boost/algorithm/string.hpp>
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/filesystem.hpp>
@@ -123,9 +125,8 @@ std::string inflatebuf(const std::string &buf)
 ObjectDataInfo get_object_data_info(const std::string &data)
 {
 	/* format: "(type)(space)(number)(NULL)" */
-	static boost::regex expr("([[:alpha:]]+) ([[:digit:]]+)\000");
 	boost::cmatch what;
-	if (! boost::regex_search(data.c_str(), what, expr, boost::match_continuous))
+	if (! boost::regex_search(data.c_str(), what, boost::regex("([[:alpha:]]+) ([[:digit:]]+)\000"), boost::match_continuous))
 		throw std::runtime_error("hdr regex");
 	return ObjectDataInfo(data, what[1], (what[0].second + 1) - what[0].first);
 }
@@ -258,7 +259,7 @@ public:
 		return res;
 	}
 
-	res_t reqPost_(const std::string &path, const std::string &data)
+	virtual res_t reqPost_(const std::string &path, const std::string &data)
 	{
 		res_t res = reqPost(path, data);
 		if (res.result_int() != 200)
@@ -415,6 +416,24 @@ int main(int argc, char **argv)
 
 #else /* _PS_UPDATER_TESTING */
 
+class PsConTest : public PsCon
+{
+public:
+	PsConTest(const std::string &host, const std::string &port) :
+		PsCon(host, port)
+	{};
+
+	res_t reqPost_(const std::string &path, const std::string &data) override
+	{
+		boost::cmatch what;
+		if (boost::regex_search(path.c_str(), what, boost::regex("/objects/([[:xdigit:]]{2})/([[:xdigit:]]{38})"), boost::match_continuous))
+			m_objects_requested.push_back(boost::algorithm::to_lower_copy(what[1].str() + what[2].str()));
+		return PsCon::reqPost_(path, data);
+	}
+
+	std::vector<shahex_t> m_objects_requested;
+};
+
 unique_ptr_gitrepository _git_repository_ensure(const std::string &repopath)
 {
 	git_repository *repo = NULL;
@@ -444,7 +463,7 @@ int main(int argc, char **argv)
 
 	unique_ptr_gitrepository repo(_git_repository_ensure(repodir));
 
-	PsCon client(t.get<std::string>("ORIGIN_DOMAIN_API"), t.get<std::string>("LISTEN_PORT"));
+	PsConTest client(t.get<std::string>("ORIGIN_DOMAIN_API"), t.get<std::string>("LISTEN_PORT"));
 
 	shahex_t head = get_head(&client, "master");
 	std::vector<shahex_t> trees = get_trees_writing(&client, repo.get(), head);
