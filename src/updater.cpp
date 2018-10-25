@@ -323,8 +323,6 @@ void get_write_object_raw(git_repository *repo, const shahex_t &obj, const std::
 	if (! ff.good())
 		throw PsConExc();
 	/* prepare final */
-	const char *repodir = git_repository_path(repo);
-	assert(repodir);
 	const boost::filesystem::path objectpathdir = objectpath.parent_path();
 	assert(objectpathdir.string().find(".git") != std::string::npos);
 	boost::filesystem::create_directories(objectpathdir);
@@ -332,7 +330,7 @@ void get_write_object_raw(git_repository *repo, const shahex_t &obj, const std::
 	boost::filesystem::rename(temppath, objectpath);
 }
 
-std::vector<shahex_t> get_trees_writing_rec(PsCon *client, git_repository *repo, const shahex_t &tree)
+std::vector<shahex_t> get_trees_writing(PsCon *client, git_repository *repo, const shahex_t &tree)
 {
 	std::vector<shahex_t> out;
 
@@ -343,15 +341,9 @@ std::vector<shahex_t> get_trees_writing_rec(PsCon *client, git_repository *repo,
 	unique_ptr_gittree t(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)));
 	for (size_t i = 0; i < git_tree_entrycount(t.get()); ++i)
 		if (git_tree_entry_filemode(git_tree_entry_byindex(t.get(), i)) == GIT_FILEMODE_TREE)
-			for (const auto &elt : get_trees_writing_rec(client, repo, ns_git::hexstr_from_oid(*git_tree_entry_id(git_tree_entry_byindex(t.get(), i)))))
+			for (const auto &elt : get_trees_writing(client, repo, ns_git::hexstr_from_oid(*git_tree_entry_id(git_tree_entry_byindex(t.get(), i)))))
 				out.push_back(elt);
 	return out;
-}
-
-std::vector<shahex_t> get_trees_writing(PsCon *client, git_repository *repo, const shahex_t &tree)
-{
-	std::vector<shahex_t> shas = get_trees_writing_rec(client, repo, tree);
-	return shas;
 }
 
 std::vector<shahex_t> get_blobs_writing(PsCon *client, git_repository *repo, const std::vector<shahex_t> &trees)
@@ -398,6 +390,7 @@ void create_ref(git_repository *repo, const std::string &refname, const git_oid 
 	git_reference *ref = NULL;
 	if (!! git_reference_create(&ref, repo, refname.c_str(), &commit, true, "DummyLogMessage"))
 		throw PsConExc();
+	git_reference_free(ref);
 }
 
 #ifndef _PS_UPDATER_TESTING
@@ -447,7 +440,7 @@ int main(int argc, char **argv)
 	shahex_t head = get_head(&client, "master");
 	std::vector<shahex_t> trees = get_trees_writing(&client, repo.get(), head);
 
-	std::cout << "qq " << head << std::endl;
+	std::cout << "head: " << head << std::endl;
 
 	return EXIT_SUCCESS;
 }
