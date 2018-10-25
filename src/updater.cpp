@@ -15,7 +15,7 @@
 #include <git2.h>
 #include <miniz.h>
 
-#ifdef _PS_DEBUG_WAIT
+#if defined(_PS_DEBUG_WAIT) && defined(WIN32)
 #include <windows.h>
 #endif
 
@@ -33,14 +33,10 @@ typedef ::std::unique_ptr<git_tree, void(*)(git_tree *)> unique_ptr_gittree;
 
 void waitdebug()
 {
-#ifdef _PS_DEBUG_WAIT
-	while (true) {
-		if (IsDebuggerPresent()) {
-			__debugbreak();
-			break;
-		}
-		Sleep(1000);
-	}
+#if defined(_PS_DEBUG_WAIT) && defined(WIN32)
+	MessageBoxA(NULL, "Attach Debugger", "", MB_OK);
+	if (IsDebuggerPresent())
+		__debugbreak();
 #endif
 }
 
@@ -131,7 +127,7 @@ ObjectDataInfo get_object_data_info(const std::string &data)
 	boost::cmatch what;
 	if (! boost::regex_search(data.c_str(), what, expr, boost::match_continuous))
 		throw std::runtime_error("hdr regex");
-	return ObjectDataInfo(data, what[1], what[0].second - data.c_str());
+	return ObjectDataInfo(data, what[1], (what[0].second + 1) - what[0].first);
 }
 
 git_oid oid_from_hexstr(const std::string &str)
@@ -224,15 +220,21 @@ public:
 		m_host_http(host + ":" + port),
 		m_ioc(),
 		m_resolver(m_ioc),
-		m_socket(m_ioc)
+		m_resolver_r(m_resolver.resolve(host, port)),
+		m_socket(new tcp::socket(m_ioc))
 	{
-		auto results = m_resolver.resolve(host, port);
-		boost::asio::connect(m_socket, results.begin(), results.end());
+		boost::asio::connect(*m_socket, m_resolver_r.begin(), m_resolver_r.end());
 	};
 
 	~PsCon()
 	{
-		m_socket.shutdown(tcp::socket::shutdown_both);
+		m_socket->shutdown(tcp::socket::shutdown_both);
+	}
+
+	void _reconnect()
+	{
+		m_socket.reset(new tcp::socket(m_ioc));
+		boost::asio::connect(*m_socket, m_resolver_r.begin(), m_resolver_r.end());
 	}
 
 	res_t reqPost(const std::string &path, const std::string &data)
@@ -240,10 +242,19 @@ public:
 		http::request<http::string_body> req(http::verb::post, path, 11);
 		req.set(http::field::host, m_host_http);
 		req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-		http::write(m_socket, req);
+		http::write(*m_socket, req);
 		boost::beast::flat_buffer buffer;
 		http::response<http::string_body> res;
-		http::read(m_socket, buffer, res);
+		http::read(*m_socket, buffer, res);
+		// https://github.com/boostorg/beast/issues/927
+		//   Repeated calls to an URL (repeated http::write calls without remaking the socket)
+		//     - needs http::response::keep_alive() true
+		//     - (for which http::response::version() must be 11 (HTTP 1.1))
+		// https://www.reddit.com/r/flask/comments/634i5u/make_flask_return_header_response_with_http11/
+		//   You can't. Flask's dev server does not implement the HTTP 1.1 spec
+		//     - flask does not support HTTP 1.1, remake socket if necessary
+		if (!res.keep_alive())
+			_reconnect();
 		return res;
 	}
 
@@ -260,12 +271,13 @@ public:
 	std::string m_host_http;
 	boost::asio::io_context m_ioc;
 	tcp::resolver m_resolver;
-	tcp::socket m_socket;
+	tcp::resolver::results_type m_resolver_r;
+	sp<tcp::socket> m_socket;
 };
 
-std::string get_object(PsCon *client, const std::string &objhex)
+std::string get_object(PsCon *client, const shahex_t &obj)
 {
-	std::string loose = client->reqPost_("/objects/" + objhex.substr(0, 2) + "/" + objhex.substr(2), "").body();
+	std::string loose = client->reqPost_("/objects/" + obj.substr(0, 2) + "/" + obj.substr(2), "").body();
 	return loose;
 }
 
@@ -279,32 +291,33 @@ shahex_t get_head(PsCon *client, const std::string &refname)
 	return objhex;
 }
 
-void ensure_object_match(const std::string &objloose, const shahex_t &obj_expected, const std::string &type_expected, git_otype otype_expected)
+void ensure_object_match(const shahex_t &obj_expected, const std::string &type_expected, git_otype otype_expected, const std::string &incoming_loose)
 {
 	const git_oid oid_expected = ns_git::oid_from_hexstr(obj_expected);
 
-	const ns_git::ObjectDataInfo loose = ns_git::get_object_data_info(ns_git::inflatebuf(objloose));
-	if (loose.m_type != type_expected)
+	const std::string incoming_data = ns_git::inflatebuf(incoming_loose);
+	const ns_git::ObjectDataInfo info = ns_git::get_object_data_info(incoming_data);
+	if (info.m_type != type_expected)
 		throw PsConExc();
 
 	git_oid oid_loose = {};
-	if (!!git_odb_hash(&oid_loose, objloose.data() + loose.m_data_offset, objloose.size() - loose.m_data_offset, otype_expected))
+	if (!!git_odb_hash(&oid_loose, incoming_data.data() + info.m_data_offset, incoming_data.size() - info.m_data_offset, otype_expected))
 		throw PsConExc();
 
 	if (!!git_oid_cmp(&oid_expected, &oid_loose))
 		throw PsConExc();
 }
 
-void get_write_object_raw(git_repository *repo, const shahex_t &obj, const std::string &objloose)
+void get_write_object_raw(git_repository *repo, const shahex_t &obj, const std::string &incoming_loose)
 {
-	ensure_object_match(obj, objloose, "tree", GIT_OBJ_TREE);
+	ensure_object_match(obj, "tree", GIT_OBJ_TREE, incoming_loose);
 	assert(!!git_repository_path(repo));
 	/* get temp and final path */
 	const std::string temppath = (boost::filesystem::temp_directory_path() / boost::filesystem::unique_path()).string();
 	const std::string objectpath = std::string(git_repository_path(repo)) + "/objects/" + obj.substr(0, 2) + "/" + obj.substr(2);
 	/* write temp */
 	std::ofstream ff(temppath, std::ios::out | std::ios::trunc | std::ios::binary);
-	ff.write(objloose.data(), objloose.size());
+	ff.write(incoming_loose.data(), incoming_loose.size());
 	ff.flush();
 	ff.close();
 	if (! ff.good())
@@ -319,11 +332,13 @@ void get_write_object_raw(git_repository *repo, const shahex_t &obj, const std::
 	boost::filesystem::rename(temppath, objectpath);
 }
 
-std::vector<shahex_t> get_trees_writing_rec(PsCon *client, git_repository *repo, const std::string &tree)
+std::vector<shahex_t> get_trees_writing_rec(PsCon *client, git_repository *repo, const shahex_t &tree)
 {
 	std::vector<shahex_t> out;
 
 	get_write_object_raw(repo, tree, get_object(client, tree));
+
+	out.push_back(tree);
 
 	unique_ptr_gittree t(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)));
 	for (size_t i = 0; i < git_tree_entrycount(t.get()); ++i)
