@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -131,7 +132,7 @@ ObjectDataInfo get_object_data_info(const std::string &data)
 	return ObjectDataInfo(data, what[1], (what[0].second + 1) - what[0].first);
 }
 
-git_oid oid_from_hexstr(const std::string &str)
+git_oid oid_from_hexstr(const shahex_t &str)
 {
 	git_oid oid = {};
 	if (str.size() != GIT_OID_HEXSZ || !!git_oid_fromstr(&oid, str.c_str()))
@@ -143,6 +144,14 @@ std::string hexstr_from_oid(const git_oid &oid)
 {
 	char buf[GIT_OID_HEXSZ + 1] = {};
 	return std::string(git_oid_tostr(buf, sizeof buf, &oid));
+}
+
+git_otype otype_from_type(const std::string &type)
+{
+	static std::map<std::string, git_otype> tbl = {{"commit", GIT_OBJ_COMMIT}, {"tree", GIT_OBJ_TREE}, {"blob", GIT_OBJ_BLOB}};
+	if (tbl.find(type) == tbl.end())
+		throw std::runtime_error("type otype");
+	return tbl[type];
 }
 
 void commit_delete(git_commit *p) { if (p) git_commit_free(p); }
@@ -292,17 +301,15 @@ shahex_t get_head(PsCon *client, const std::string &refname)
 	return objhex;
 }
 
-void ensure_object_match(const shahex_t &obj_expected, const std::string &type_expected, git_otype otype_expected, const std::string &incoming_loose)
+void ensure_object_match(const shahex_t &obj_expected, const std::string &incoming_loose)
 {
 	const git_oid oid_expected = ns_git::oid_from_hexstr(obj_expected);
 
 	const std::string incoming_data = ns_git::inflatebuf(incoming_loose);
 	const ns_git::ObjectDataInfo info = ns_git::get_object_data_info(incoming_data);
-	if (info.m_type != type_expected)
-		throw PsConExc();
 
 	git_oid oid_loose = {};
-	if (!!git_odb_hash(&oid_loose, incoming_data.data() + info.m_data_offset, incoming_data.size() - info.m_data_offset, otype_expected))
+	if (!!git_odb_hash(&oid_loose, incoming_data.data() + info.m_data_offset, incoming_data.size() - info.m_data_offset, ns_git::otype_from_type(info.m_type)))
 		throw PsConExc();
 
 	if (!!git_oid_cmp(&oid_expected, &oid_loose))
@@ -311,7 +318,7 @@ void ensure_object_match(const shahex_t &obj_expected, const std::string &type_e
 
 void get_write_object_raw(git_repository *repo, const shahex_t &obj, const std::string &incoming_loose)
 {
-	ensure_object_match(obj, "tree", GIT_OBJ_TREE, incoming_loose);
+	ensure_object_match(obj, incoming_loose);
 	assert(!!git_repository_path(repo));
 	/* get temp and final path */
 	const boost::filesystem::path temppath = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path();
@@ -363,15 +370,15 @@ std::vector<shahex_t> get_blobs_writing(PsCon *client, git_repository *repo, con
 	for (const auto &elt : trees) {
 		unique_ptr_gittree t(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(elt)));
 		for (size_t i = 0; i < git_tree_entrycount(t.get()); ++i)
-			if (git_tree_entry_type(git_tree_entry_byindex(t.get(), i)) == GIT_FILEMODE_BLOB ||
+			if (git_tree_entry_filemode(git_tree_entry_byindex(t.get(), i)) == GIT_FILEMODE_BLOB ||
 				git_tree_entry_filemode(git_tree_entry_byindex(t.get(), i)) == GIT_FILEMODE_BLOB_EXECUTABLE)
 			{
-				blobs.push_back(elt);
+				blobs.push_back(ns_git::hexstr_from_oid(*git_tree_entry_id(git_tree_entry_byindex(t.get(), i))));
 			}
 	}
 
 	for (const auto &blob : blobs)
-		get_write_object_raw(repo, blob, get_object(client, blob));
+		get_write_object_raw_ifnotexist(client, repo, blob);
 
 	return blobs;
 }
@@ -450,6 +457,25 @@ unique_ptr_gitrepository _git_repository_ensure(const std::string &repopath)
 	return unique_ptr_gitrepository(repo, ns_git::repo_delete);
 }
 
+void _git_checkout_obj(git_repository *repo, const shahex_t &tree, const std::string &chkoutdir)
+{
+	if (!boost::regex_search(chkoutdir.c_str(), boost::cmatch(), boost::regex("chk")))
+		throw std::runtime_error("checkout sanity");
+
+	unique_ptr_gittree _tree(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)));
+
+	/* https://libgit2.github.com/docs/guides/101-samples/#objects_casting */
+	// FIXME: reevaluate checkout_strategy flag GIT_CHECKOUT_REMOVE_UNTRACKED
+
+	git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
+	opts.checkout_strategy = GIT_CHECKOUT_FORCE;
+	opts.disable_filters = 1;
+	opts.target_directory = chkoutdir.c_str();
+
+	if (!!git_checkout_tree(repo, (git_object *) _tree.get(), &opts))
+		throw std::runtime_error("checkout tree");
+}
+
 int main(int argc, char **argv)
 {
 	git_libgit2_init();
@@ -458,8 +484,10 @@ int main(int argc, char **argv)
 
 	pt_t t = readconfig();
 	std::string repodir = t.get<std::string>("REPO_DIR");
+	boost::filesystem::path chkoutdir = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("chk_%%%%-%%%%-%%%%-%%%%");
 
 	std::cout << "repodir: " << repodir << std::endl;
+	std::cout << "chkodir: " << chkoutdir.string() << std::endl;
 
 	unique_ptr_gitrepository repo(_git_repository_ensure(repodir));
 
@@ -467,6 +495,9 @@ int main(int argc, char **argv)
 
 	shahex_t head = get_head(&client, "master");
 	std::vector<shahex_t> trees = get_trees_writing(&client, repo.get(), head);
+	std::vector<shahex_t> blobs = get_blobs_writing(&client, repo.get(), trees);
+
+	_git_checkout_obj(repo.get(), head, chkoutdir.string());
 
 	std::cout << "head: " << head << std::endl;
 
