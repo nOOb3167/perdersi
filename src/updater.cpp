@@ -410,37 +410,6 @@ void create_ref(git_repository *repo, const std::string &refname, const git_oid 
 	git_reference_free(ref);
 }
 
-#ifndef _PS_UPDATER_TESTING
-
-int main(int argc, char **argv)
-{
-  git_libgit2_init();
-
-  PsCon client("perder.si", "5201");
-  
-  return EXIT_SUCCESS;
-}
-
-#else /* _PS_UPDATER_TESTING */
-
-class PsConTest : public PsCon
-{
-public:
-	PsConTest(const std::string &host, const std::string &port) :
-		PsCon(host, port)
-	{};
-
-	res_t reqPost_(const std::string &path, const std::string &data) override
-	{
-		boost::cmatch what;
-		if (boost::regex_search(path.c_str(), what, boost::regex("/objects/([[:xdigit:]]{2})/([[:xdigit:]]{38})"), boost::match_continuous))
-			m_objects_requested.push_back(boost::algorithm::to_lower_copy(what[1].str() + what[2].str()));
-		return PsCon::reqPost_(path, data);
-	}
-
-	std::vector<shahex_t> m_objects_requested;
-};
-
 unique_ptr_gitrepository _git_repository_ensure(const std::string &repopath)
 {
 	git_repository *repo = NULL;
@@ -475,6 +444,37 @@ void _git_checkout_obj(git_repository *repo, const shahex_t &tree, const std::st
 	if (!!git_checkout_tree(repo, (git_object *) _tree.get(), &opts))
 		throw std::runtime_error("checkout tree");
 }
+
+#ifndef _PS_UPDATER_TESTING
+
+int main(int argc, char **argv)
+{
+  git_libgit2_init();
+
+  PsCon client("perder.si", "5201");
+  
+  return EXIT_SUCCESS;
+}
+
+#else /* _PS_UPDATER_TESTING */
+
+class PsConTest : public PsCon
+{
+public:
+	PsConTest(const std::string &host, const std::string &port) :
+		PsCon(host, port)
+	{};
+
+	res_t reqPost_(const std::string &path, const std::string &data) override
+	{
+		boost::cmatch what;
+		if (boost::regex_search(path.c_str(), what, boost::regex("/objects/([[:xdigit:]]{2})/([[:xdigit:]]{38})"), boost::match_continuous))
+			m_objects_requested.push_back(boost::algorithm::to_lower_copy(what[1].str() + what[2].str()));
+		return PsCon::reqPost_(path, data);
+	}
+
+	std::vector<shahex_t> m_objects_requested;
+};
 
 int main(int argc, char **argv)
 {
