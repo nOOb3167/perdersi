@@ -330,11 +330,20 @@ void get_write_object_raw(git_repository *repo, const shahex_t &obj, const std::
 	boost::filesystem::rename(temppath, objectpath);
 }
 
+void get_write_object_raw_ifnotexist(PsCon *client, git_repository *repo, const shahex_t &obj)
+{
+	unique_ptr_gitodb odb(ns_git::odb_from_repo(repo));
+	git_oid _obj = ns_git::oid_from_hexstr(obj);
+	if (git_odb_exists(odb.get(), &_obj))
+		return;
+	get_write_object_raw(repo, obj, get_object(client, obj));
+}
+
 std::vector<shahex_t> get_trees_writing(PsCon *client, git_repository *repo, const shahex_t &tree)
 {
 	std::vector<shahex_t> out;
 
-	get_write_object_raw(repo, tree, get_object(client, tree));
+	get_write_object_raw_ifnotexist(client, repo, tree);
 
 	out.push_back(tree);
 
