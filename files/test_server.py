@@ -47,11 +47,15 @@ def _testing_make_server_config_env(repodir: pathlib.Path):
     return env
 
 @pytest.fixture(scope="session")
-def repodir(tmpdir_factory):
+def repodir(tmpdir_factory) -> pathlib.Path:
     return pathlib_Path(tmpdir_factory.mktemp("repo"))
 
 @pytest.fixture(scope="session")
-def repodir_s(tmpdir_factory):
+def repodir_updater(tmpdir_factory) -> pathlib.Path:
+    return pathlib_Path(tmpdir_factory.mktemp("repo_updater"))
+
+@pytest.fixture(scope="session")
+def repodir_s(tmpdir_factory) -> pathlib.Path:
     return pathlib_Path(tmpdir_factory.mktemp("repo_s"))
 
 @pytest.fixture(scope="session")
@@ -276,15 +280,15 @@ def test_updater(
     customopt_debug_wait: str,
     customopt_python_exe: str,
     customopt_updater_exe: str,
-    rc: ServerRepoCtx,
-    rc_s: ServerRepoCtx,
+    repodir_updater: pathlib.Path,
+    repodir_s: pathlib.Path,
     client: flask.testing.FlaskClient
 ):
     import subprocess
 
-    p0 = subprocess.Popen([customopt_python_exe, "server.py"], env=_testing_make_server_config_env(repodir=rc_s.repodir))
-    p1 = subprocess.Popen([customopt_updater_exe], env=_testing_make_server_config_env(repodir=rc.repodir))
-    try: p1.communicate(timeout=(None if customopt_debug_wait == "ON" else 10))
+    p0 = subprocess.Popen([customopt_updater_exe], env=_testing_make_server_config_env(repodir=repodir_updater))
+    p1 = subprocess.Popen([customopt_python_exe, "server.py"], env=_testing_make_server_config_env(repodir=repodir_s))
+    try: p0.communicate(timeout=(None if customopt_debug_wait == "ON" else 10))
     except: pass
     try: p0.kill()
     except: pass
