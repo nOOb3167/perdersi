@@ -294,6 +294,6 @@ def test_updater(
     except: pass
     try: p1.kill()
     except: pass
-    
-    if p1.returncode != 0:
+
+    if p0.returncode != 0:
         raise RetCodeErr()
