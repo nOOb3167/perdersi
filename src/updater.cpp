@@ -313,10 +313,10 @@ void get_write_object_raw(git_repository *repo, const shahex_t &obj, const std::
 	ensure_object_match(obj, "tree", GIT_OBJ_TREE, incoming_loose);
 	assert(!!git_repository_path(repo));
 	/* get temp and final path */
-	const std::string temppath = (boost::filesystem::temp_directory_path() / boost::filesystem::unique_path()).string();
-	const std::string objectpath = std::string(git_repository_path(repo)) + "/objects/" + obj.substr(0, 2) + "/" + obj.substr(2);
+	const boost::filesystem::path temppath = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path();
+	const boost::filesystem::path objectpath = boost::filesystem::path(git_repository_path(repo)) / "objects" / obj.substr(0, 2) / obj.substr(2);
 	/* write temp */
-	std::ofstream ff(temppath, std::ios::out | std::ios::trunc | std::ios::binary);
+	std::ofstream ff(temppath.string(), std::ios::out | std::ios::trunc | std::ios::binary);
 	ff.write(incoming_loose.data(), incoming_loose.size());
 	ff.flush();
 	ff.close();
@@ -325,8 +325,8 @@ void get_write_object_raw(git_repository *repo, const shahex_t &obj, const std::
 	/* prepare final */
 	const char *repodir = git_repository_path(repo);
 	assert(repodir);
-	const std::string objectpathdir = boost::filesystem::path(objectpath).parent_path().string();
-	assert(objectpathdir.find(".git") != std::string::npos);
+	const boost::filesystem::path objectpathdir = objectpath.parent_path();
+	assert(objectpathdir.string().find(".git") != std::string::npos);
 	boost::filesystem::create_directories(objectpathdir);
 	/* write final */
 	boost::filesystem::rename(temppath, objectpath);
