@@ -35,6 +35,9 @@ std::string current_executable_filename()
 }
 
 // https://stackoverflow.com/questions/3156841/boostfilesystemrename-cannot-create-a-file-when-that-file-already-exists
+// https://docs.microsoft.com/en-us/windows/desktop/api/winbase/nf-winbase-movefileexa
+//    If the destination is on another drive, you must set the MOVEFILE_COPY_ALLOWED flag in dwFlags.
+//    (Running executable cannot replace itself by copy)
 void rename_file_file(
 	std::string src_filename,
 	std::string dst_filename)
@@ -87,7 +90,12 @@ void file_write_moving(const std::string &finalpathdir_creation_lump_check, cons
 	if (finalpathdir_creation_lump_check.size()) {
 		if (finalpathdir.string().find(finalpathdir_creation_lump_check) == std::string::npos)
 			throw std::runtime_error("finalpathdir_creation_lump_check");
-		boost::filesystem::create_directories(finalpathdir);
+		try {
+			if (!boost::filesystem::exists(finalpathdir))
+				boost::filesystem::create_directories(finalpathdir);
+		} catch (boost::filesystem::filesystem_error &) {
+			/* empty */
+		}
 	}
 	/* write temp */
 	boost::filesystem::path temppath = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("pstmp_%%%%-%%%%-%%%%-%%%%");
@@ -99,6 +107,29 @@ void file_write_moving(const std::string &finalpathdir_creation_lump_check, cons
 		throw std::runtime_error("file write");
 	/* write final */
 	rename_file_file(temppath.string(), finalpath.string());
+}
+
+void reexec_tryout_and_move(const boost::filesystem::path &temp_exe_path, const boost::filesystem::path &final_exe_path)
+{
+	if (!boost::regex_search(temp_exe_path.string().c_str(), boost::cmatch(), boost::regex(".exe$")) ||
+		!boost::regex_search(final_exe_path.string().c_str(), boost::cmatch(), boost::regex(".exe$")))
+	{
+		throw std::runtime_error("reexec tryout path");
+	}
+	// tryout
+	boost::process::child c(temp_exe_path, "--tryout");
+	if (!c.wait_for(std::chrono::milliseconds(5000)))
+		throw std::runtime_error("reexec tryout wait");
+	if (c.exit_code() != 123)
+		throw std::runtime_error("reexec tryout code");
+	// rename dance final->old temp->final
+	rename_file_file(final_exe_path.string(), boost::filesystem::path(final_exe_path).replace_extension(".old").string());
+	rename_file_file(temp_exe_path.string(), final_exe_path.string());
+}
+
+void reexec_forget(const boost::filesystem::path &exe_path)
+{
+	boost::process::spawn(exe_path);
 }
 
 namespace ns_git
@@ -530,6 +561,10 @@ public:
 
 int main(int argc, char **argv)
 {
+	for (size_t i = 1; i < argc; ++i)
+		if (std::string(argv[i]) == "--tryout")
+			return 123;
+
 	git_libgit2_init();
 
 	waitdebug();
@@ -555,6 +590,14 @@ int main(int argc, char **argv)
 	std::cout << "head: " << head << std::endl;
 
 	assert(content_tree_entry_blob(repo.get(), head, "a.txt") == "aaa");
+
+#ifndef _PS_UPDATER_TESTING
+	std::string exe_content = content_tree_entry_blob(repo.get(), head, "updater.exe");
+	boost::filesystem::path tryout_exe_path = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("pstmp_%%%%-%%%%-%%%%-%%%%.exe");
+	file_write_moving("", tryout_exe_path, exe_content);
+	reexec_tryout_and_move(tryout_exe_path, curexepath);
+	reexec_forget(curexepath);
+#endif
 
 	return EXIT_SUCCESS;
 }

@@ -57,6 +57,8 @@ add_custom_target(Tests
 		-m pytest --cov=. --cov-report term
 		--customopt_debug_wait=${PS_WAIT_DEBUG}
 		--customopt_python_exe=${Python3_EXECUTABLE}
+		--customopt_tupdater2_exe=$<TARGET_FILE:tupdater2>
+		--customopt_tupdater3_exe=$<TARGET_FILE:tupdater3>
 		--customopt_updater_exe=$<TARGET_FILE:test>
 	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/../files
 	COMMENT "Running Tests"

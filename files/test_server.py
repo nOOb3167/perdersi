@@ -46,6 +46,12 @@ def _testing_make_server_config_env(repodir: pathlib.Path):
     env["PS_CONFIG"] = json.dumps(_testing_make_server_config(repodir))
     return env
 
+def _testing_make_server_config_env_(_dict: dict):
+    import json, os
+    env = os.environ.copy()
+    env["PS_CONFIG"] = json.dumps(_dict)
+    return env
+
 @pytest.fixture(scope="session")
 def repodir(tmpdir_factory) -> pathlib.Path:
     return pathlib_Path(tmpdir_factory.mktemp("repo"))
@@ -69,21 +75,27 @@ def rc(repodir) -> ServerRepoCtx:
     yield ServerRepoCtx(repodir, repo)
 
 @pytest.fixture(scope="session")
-def rc_s(repodir_s) -> ServerRepoCtx:
+def rc_s(
+    customopt_tupdater2_exe: str,
+    customopt_tupdater3_exe: str,
+    repodir_s: pathlib.Path
+) -> ServerRepoCtx:
+    import shutil
     repo = git.Repo.init(str(repodir_s))
     rc = ServerRepoCtx(repodir_s, repo)
     # BEG populate with dummy data
-    ffs = [("a.txt", b"aaa"),
-           ("d/b.txt", b"bbb")]
-    for ff in ffs:
+    for ff in [("a.txt", b"aaa"), ("d/b.txt", b"bbb")]:
         with _file_open_mkdirp(str(rc.repodir.joinpath(ff[0]))) as f:
             f.write(ff[1])
-    for ff in ffs:
         rc.repo.index.add([ff[0]])
+    # END populate with dummy data
+    # BEG populate with tupdater
+    shutil.copyfile(customopt_tupdater3_exe, str(rc.repodir.joinpath("updater.exe")))
+    rc.repo.index.add(["updater.exe"])
+    # END populate with tupdater
     commit = rc.repo.index.commit("ccc")
     ref_master = git.Reference(rc.repo, "refs/heads/master")
     ref_master.set_object(commit)
-    # END populate with dummy data
     yield rc
 
 @pytest.fixture
@@ -151,7 +163,7 @@ def _get_blobs(
     client: flask.testing.FlaskClient,
     loosedb,
     blobs: List[shahex]
-) -> List[shahex]:
+):
     ''' write blobs '''
     b: shahex
     for b in blobs:
@@ -248,11 +260,8 @@ def test_get_head_blobs(
     master_tree: shahex = _get_master_tree_hex(client)
     trees: List[shahex] = _get_trees(client, rc.repo.odb, master_tree)
     blobs: List[shahex] = _list_tree_blobs(rc.repo.odb, trees)
-    assert len(blobs) == 2
-    bwritten = _get_blobs(client, rc.repo.odb, blobs)
-    datas: Set[binary] = { b"aaa", b"bbb" }
-    for b in blobs:
-        assert rc.repo.odb.stream(_hex2bin(b)).read() in datas
+    _get_blobs(client, rc.repo.odb, blobs)
+    assert len(blobs) == 3
 
 def test_commit_head(
     rc: ServerRepoCtx,
@@ -275,6 +284,22 @@ def test_checkout_head(
     #index.checkout()
     assert os_path_exists(str(rc.repodir.joinpath(".git")))
     rc.repo.head.reset(master.commit, index=True, working_tree=True)
+
+def test_updater_reexec(
+    tmpdir_factory,
+    customopt_tupdater2_exe: str,
+    customopt_tupdater3_exe: str
+):
+    import shutil, subprocess
+    tmpdir: pathlib.Path = pathlib_Path(tmpdir_factory.mktemp("reexec"))
+    temp2_exe: pathlib.Path = tmpdir.joinpath("tupdater2.exe")
+    temp3_exe: pathlib.Path = tmpdir.joinpath("tupdater3.exe")
+    shutil.copyfile(customopt_tupdater2_exe, str(temp2_exe))
+    shutil.copyfile(customopt_tupdater3_exe, str(temp3_exe))
+    p0 = subprocess.Popen([str(temp2_exe)], env=_testing_make_server_config_env_(_dict={ "TUPDATER3_EXE": str(temp3_exe) }))
+    p0.wait()
+    if p0.returncode != 0:
+        raise RetCodeErr()
 
 def test_updater(
     customopt_debug_wait: str,

@@ -22,6 +22,9 @@ std::string current_executable_filename()
 }
 
 // https://stackoverflow.com/questions/3156841/boostfilesystemrename-cannot-create-a-file-when-that-file-already-exists
+// https://docs.microsoft.com/en-us/windows/desktop/api/winbase/nf-winbase-movefileexa
+//    If the destination is on another drive, you must set the MOVEFILE_COPY_ALLOWED flag in dwFlags.
+//    (Running executable cannot replace itself by copy)
 void rename_file_file(
 	std::string src_filename,
 	std::string dst_filename)
@@ -54,7 +57,9 @@ int main(int argc, char **argv)
 
 #if _PS_DEBUG_TUPDATER == 2
 	boost::filesystem::path tupdater2_path(current_executable_filename());
-	boost::filesystem::path tupdater3_path(config.get<std::string>("TUPDATER3_PATH"));
+	boost::filesystem::path tupdater2_path_old(tupdater2_path);
+	tupdater2_path_old.replace_extension(".old");
+	boost::filesystem::path tupdater3_path(config.get<std::string>("TUPDATER3_EXE"));
 	if (!boost::filesystem::is_regular_file(tupdater2_path) ||
 		!boost::filesystem::is_regular_file(tupdater3_path) ||
 		!boost::regex_search(tupdater2_path.string().c_str(), boost::cmatch(), boost::regex(".exe$")) ||
@@ -62,10 +67,11 @@ int main(int argc, char **argv)
 	{
 		throw std::runtime_error("path sanity");
 	}
+	rename_file_file(tupdater2_path.string(), tupdater2_path_old.string());
 	rename_file_file(tupdater3_path.string(), tupdater2_path.string());
-	boost::process::child tupdater3_process(tupdater3_path);
-	tupdater3_process.wait();
-	if (tupdater3_process.exit_code() != 123)
+	boost::process::child reexec_process(tupdater2_path);
+	reexec_process.wait();
+	if (reexec_process.exit_code() != 123)
 		throw std::runtime_error("process exit code");
 #elif _PS_DEBUG_TUPDATER == 3
 	return 123;
