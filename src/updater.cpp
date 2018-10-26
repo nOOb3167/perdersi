@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -13,14 +14,37 @@
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/process.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/regex.hpp>
 #include <git2.h>
 #include <miniz.h>
 
-#if defined(_PS_DEBUG_WAIT) && defined(WIN32)
+#if defined(WIN32) || defined(_WIN32)
 #include <windows.h>
+std::string current_executable_filename()
+{
+	std::string fname(1024, '\0');
+
+	DWORD LenFileName = GetModuleFileName(NULL, (char *) fname.data(), (DWORD)fname.size());
+	if (!(LenFileName != 0 && LenFileName < fname.size()))
+		throw std::runtime_error("current executable filename");
+	fname.resize(LenFileName);
+
+	return fname;
+}
+
+// https://stackoverflow.com/questions/3156841/boostfilesystemrename-cannot-create-a-file-when-that-file-already-exists
+void rename_file_file(
+	std::string src_filename,
+	std::string dst_filename)
+{
+	BOOL ok = MoveFileEx(src_filename.c_str(), dst_filename.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+	if (!ok)
+		throw std::runtime_error("rename");
+}
 #endif
+
 
 template<typename T>
 using sp = ::std::shared_ptr<T>;
@@ -54,6 +78,20 @@ pt_t readconfig()
 	boost::property_tree::ptree pt;
 	boost::property_tree::json_parser::read_json(ss, pt);
 	return pt;
+}
+
+void file_write_moving(const boost::filesystem::path &finalpath, const std::string &content)
+{
+	boost::filesystem::path temppath = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("pstmp_%%%%-%%%%-%%%%-%%%%");
+	/* write temp */
+	std::ofstream ff(temppath.string(), std::ios::out | std::ios::trunc | std::ios::binary);
+	ff.write(content.data(), content.size());
+	ff.flush();
+	ff.close();
+	if (! ff.good())
+		throw std::runtime_error("file write");
+	/* write final */
+	rename_file_file(temppath.string(), finalpath.string());
 }
 
 namespace ns_git
@@ -506,6 +544,7 @@ int main(int argc, char **argv)
 	pt_t t = readconfig();
 	std::string repodir = t.get<std::string>("REPO_DIR");
 	boost::filesystem::path chkoutdir = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("chk_%%%%-%%%%-%%%%-%%%%");
+	boost::filesystem::path curexepath(current_executable_filename());
 
 	std::cout << "repodir: " << repodir << std::endl;
 	std::cout << "chkodir: " << chkoutdir.string() << std::endl;
