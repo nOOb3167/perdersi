@@ -80,10 +80,17 @@ pt_t readconfig()
 	return pt;
 }
 
-void file_write_moving(const boost::filesystem::path &finalpath, const std::string &content)
+void file_write_moving(const std::string &finalpathdir_creation_lump_check, const boost::filesystem::path &finalpath, const std::string &content)
 {
-	boost::filesystem::path temppath = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("pstmp_%%%%-%%%%-%%%%-%%%%");
+	/* prepare final */
+	const boost::filesystem::path finalpathdir = finalpath.parent_path();
+	if (finalpathdir_creation_lump_check.size()) {
+		if (finalpathdir.string().find(finalpathdir_creation_lump_check) == std::string::npos)
+			throw std::runtime_error("finalpathdir_creation_lump_check");
+		boost::filesystem::create_directories(finalpathdir);
+	}
 	/* write temp */
+	boost::filesystem::path temppath = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("pstmp_%%%%-%%%%-%%%%-%%%%");
 	std::ofstream ff(temppath.string(), std::ios::out | std::ios::trunc | std::ios::binary);
 	ff.write(content.data(), content.size());
 	ff.flush();
@@ -368,22 +375,8 @@ void get_write_object_raw(git_repository *repo, const shahex_t &obj, const std::
 {
 	ensure_object_match(obj, incoming_loose);
 	assert(!!git_repository_path(repo));
-	/* get temp and final path */
-	const boost::filesystem::path temppath = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path();
 	const boost::filesystem::path objectpath = boost::filesystem::path(git_repository_path(repo)) / "objects" / obj.substr(0, 2) / obj.substr(2);
-	/* write temp */
-	std::ofstream ff(temppath.string(), std::ios::out | std::ios::trunc | std::ios::binary);
-	ff.write(incoming_loose.data(), incoming_loose.size());
-	ff.flush();
-	ff.close();
-	if (! ff.good())
-		throw PsConExc();
-	/* prepare final */
-	const boost::filesystem::path objectpathdir = objectpath.parent_path();
-	assert(objectpathdir.string().find(".git") != std::string::npos);
-	boost::filesystem::create_directories(objectpathdir);
-	/* write final */
-	boost::filesystem::rename(temppath, objectpath);
+	file_write_moving(".git", objectpath, incoming_loose);
 }
 
 void get_write_object_raw_ifnotexist(PsCon *client, git_repository *repo, const shahex_t &obj)
