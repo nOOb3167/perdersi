@@ -55,10 +55,21 @@ void file_write_moving(const std::string &finalpathdir_creation_lump_check, cons
 	ff.write(content.data(), content.size());
 	ff.flush();
 	ff.close();
-	if (! ff.good())
+	if (!ff.good())
 		throw std::runtime_error("file write");
 	/* write final */
 	cruft_rename_file_file(temppath.string(), finalpath.string());
+}
+
+std::string file_read(const boost::filesystem::path &path)
+{
+	std::ifstream ff(path.string().c_str(), std::ios::in | std::ios::binary);
+	std::stringstream ss;
+	ss << ff.rdbuf();
+	if (!ff.good())
+		throw std::runtime_error("file read");
+	std::string str(ss.str());
+	return str;
 }
 
 namespace ns_git
@@ -501,16 +512,15 @@ int main(int argc, char **argv)
 	do {
 		if (arg_skipselfupdate)
 			break;
-		unique_ptr_gitblob updater(blob_tree_entry(repo.get(), head, "updater.exe"));
-		git_oid curexeoid = {};
-		if (!!git_odb_hashfile(&curexeoid, cruft_current_executable_filename().c_str(), GIT_OBJ_BLOB))
-			throw PsConExc();
-		if (ns_git::hexstr_equals(ns_git::hexstr_from_oid(curexeoid), ns_git::hexstr_from_oid(*git_blob_id(updater.get()))))
+		std::string updater_content(blob_tree_entry_content(repo.get(), head, "updater.exe"));
+		if (file_read(cruft_current_executable_filename()) == updater_content)
 			break;
 		boost::filesystem::path tryout_exe_path = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("pstmp_%%%%-%%%%-%%%%-%%%%.exe");
-		file_write_moving("", tryout_exe_path, blob_tree_entry_content(repo.get(), head, "updater.exe"));
+		file_write_moving("", tryout_exe_path, updater_content);
 		cruft_exec_file_expecting_ex(tryout_exe_path.string(), "--tryout", std::chrono::milliseconds(5000), 123);
 		cruft_rename_file_selfexec(tryout_exe_path.string(), cruft_current_executable_filename());
+		if (file_read(cruft_current_executable_filename()) != updater_content)
+			throw std::runtime_error("failed updating");
 		boost::process::spawn(cruft_current_executable_filename(), "--skipselfupdate");
 
 		return EXIT_SUCCESS;
