@@ -230,6 +230,36 @@ unique_ptr_gittree tree_lookup(git_repository *repo, const git_oid oid)
 	return unique_ptr_gittree(p, tree_delete);
 }
 
+unique_ptr_gitrepository repository_ensure(const std::string &repopath)
+{
+	int err = 0;
+	git_repository *repo = NULL;
+	git_repository_init_options init_options = GIT_REPOSITORY_INIT_OPTIONS_INIT;
+	init_options.flags = GIT_REPOSITORY_INIT_NO_REINIT | GIT_REPOSITORY_INIT_MKDIR;
+	assert(init_options.version == 1);
+
+	if (!!(err = git_repository_init_ext(&repo, repopath.c_str(), &init_options))) {
+		if (err == GIT_EEXISTS)
+			return unique_ptr_gitrepository(ns_git::repository_open(repopath.c_str()));
+		throw std::runtime_error("ensure repository init");
+	}
+	return unique_ptr_gitrepository(repo, ns_git::repo_delete);
+}
+
+void checkout_obj(git_repository *repo, const shahex_t &tree, const std::string &chkoutdir)
+{
+	if (!boost::regex_search(chkoutdir.c_str(), boost::cmatch(), boost::regex("chk")))
+		throw std::runtime_error("checkout sanity");
+	// FIXME: consider GIT_CHECKOUT_REMOVE_UNTRACKED
+	git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
+	opts.checkout_strategy = GIT_CHECKOUT_FORCE;
+	opts.disable_filters = 1;
+	opts.target_directory = chkoutdir.c_str();
+	unique_ptr_gittree _tree(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)));
+	if (!!git_checkout_tree(repo, (git_object *) _tree.get(), &opts))
+		throw std::runtime_error("checkout tree");
+}
+
 }
 
 using tcp = boost::asio::ip::tcp;
@@ -440,36 +470,6 @@ void create_ref(git_repository *repo, const std::string &refname, const git_oid 
 	git_reference_free(ref);
 }
 
-unique_ptr_gitrepository _git_repository_ensure(const std::string &repopath)
-{
-	int err = 0;
-	git_repository *repo = NULL;
-	git_repository_init_options init_options = GIT_REPOSITORY_INIT_OPTIONS_INIT;
-	init_options.flags = GIT_REPOSITORY_INIT_NO_REINIT | GIT_REPOSITORY_INIT_MKDIR;
-	assert(init_options.version == 1);
-
-	if (!!(err = git_repository_init_ext(&repo, repopath.c_str(), &init_options))) {
-		if (err == GIT_EEXISTS)
-			return unique_ptr_gitrepository(ns_git::repository_open(repopath.c_str()));
-		throw std::runtime_error("ensure repository init");
-	}
-	return unique_ptr_gitrepository(repo, ns_git::repo_delete);
-}
-
-void _git_checkout_obj(git_repository *repo, const shahex_t &tree, const std::string &chkoutdir)
-{
-	if (!boost::regex_search(chkoutdir.c_str(), boost::cmatch(), boost::regex("chk")))
-		throw std::runtime_error("checkout sanity");
-	// FIXME: consider GIT_CHECKOUT_REMOVE_UNTRACKED
-	git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
-	opts.checkout_strategy = GIT_CHECKOUT_FORCE;
-	opts.disable_filters = 1;
-	opts.target_directory = chkoutdir.c_str();
-	unique_ptr_gittree _tree(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)));
-	if (!!git_checkout_tree(repo, (git_object *) _tree.get(), &opts))
-		throw std::runtime_error("checkout tree");
-}
-
 int main(int argc, char **argv)
 {
 	bool arg_skipselfupdate = false;
@@ -485,7 +485,7 @@ int main(int argc, char **argv)
 	pt_t config = cruft_config_read();
 	boost::filesystem::path chkoutdir = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("chk_%%%%-%%%%-%%%%-%%%%");
 
-	unique_ptr_gitrepository repo(_git_repository_ensure(config.get<std::string>("REPO_DIR")));
+	unique_ptr_gitrepository repo(ns_git::repository_ensure(config.get<std::string>("REPO_DIR")));
 
 	PsConTest client(config.get<std::string>("ORIGIN_DOMAIN_API"), config.get<std::string>("LISTEN_PORT"));
 	shahex_t head = get_head(&client, "master");
@@ -496,7 +496,7 @@ int main(int argc, char **argv)
 
 	std::vector<shahex_t> trees = get_trees_writing(&client, repo.get(), head);
 	std::vector<shahex_t> blobs = get_blobs_writing(&client, repo.get(), trees);
-	_git_checkout_obj(repo.get(), head, chkoutdir.string());
+	ns_git::checkout_obj(repo.get(), head, chkoutdir.string());
 
 	do {
 		if (arg_skipselfupdate)
