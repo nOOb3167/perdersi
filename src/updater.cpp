@@ -152,12 +152,27 @@ std::string hexstr_from_oid(const git_oid &oid)
 	return std::string(git_oid_tostr(buf, sizeof buf, &oid));
 }
 
+bool hexstr_equals(const shahex_t &a, const shahex_t &b)
+{
+	git_oid a_ = oid_from_hexstr(a), b_ = oid_from_hexstr(b);
+	return !git_oid_cmp(&a_, &b_);
+}
+
 git_otype otype_from_type(const std::string &type)
 {
 	static std::map<std::string, git_otype> tbl = {{"commit", GIT_OBJ_COMMIT}, {"tree", GIT_OBJ_TREE}, {"blob", GIT_OBJ_BLOB}};
 	if (tbl.find(type) == tbl.end())
 		throw std::runtime_error("type otype");
 	return tbl[type];
+}
+
+shahex_t get_object_data_hexstr(const std::string &incoming_data)
+{
+	const ns_git::ObjectDataInfo info = ns_git::get_object_data_info(incoming_data);
+	git_oid oid_loose = {};
+	if (!!git_odb_hash(&oid_loose, incoming_data.data() + info.m_data_offset, incoming_data.size() - info.m_data_offset, ns_git::otype_from_type(info.m_type)))
+		throw std::runtime_error("object data oid hash");
+	return hexstr_from_oid(oid_loose);
 }
 
 void blob_delete(git_blob *p) { if (p) git_blob_free(p); }
@@ -222,11 +237,11 @@ namespace http = boost::beast::http;
 
 using res_t = http::response<http::string_body>;
 
-class PsConExc : public std::exception
+class PsConExc : public std::runtime_error
 {
 public:
 	PsConExc() :
-		std::exception()
+		std::runtime_error("error")
 	{}
 };
 
@@ -328,24 +343,10 @@ shahex_t get_head(PsCon *client, const std::string &refname)
 	return objhex;
 }
 
-void ensure_object_match(const shahex_t &obj_expected, const std::string &incoming_loose)
-{
-	const git_oid oid_expected = ns_git::oid_from_hexstr(obj_expected);
-
-	const std::string incoming_data = ns_git::inflatebuf(incoming_loose);
-	const ns_git::ObjectDataInfo info = ns_git::get_object_data_info(incoming_data);
-
-	git_oid oid_loose = {};
-	if (!!git_odb_hash(&oid_loose, incoming_data.data() + info.m_data_offset, incoming_data.size() - info.m_data_offset, ns_git::otype_from_type(info.m_type)))
-		throw PsConExc();
-
-	if (!!git_oid_cmp(&oid_expected, &oid_loose))
-		throw PsConExc();
-}
-
 void get_write_object_raw(git_repository *repo, const shahex_t &obj, const std::string &incoming_loose)
 {
-	ensure_object_match(obj, incoming_loose);
+	if (!ns_git::hexstr_equals(obj, ns_git::get_object_data_hexstr(ns_git::inflatebuf(incoming_loose))))
+		throw PsConExc();
 	assert(git_repository_path(repo));
 	const boost::filesystem::path objectpath = boost::filesystem::path(git_repository_path(repo)) / "objects" / obj.substr(0, 2) / obj.substr(2);
 	file_write_moving(".git", objectpath, incoming_loose);
@@ -396,13 +397,18 @@ std::vector<shahex_t> get_blobs_writing(PsCon *client, git_repository *repo, con
 	return blobs;
 }
 
-std::string content_tree_entry_blob(git_repository *repo, const shahex_t &tree, const std::string &entry)
+unique_ptr_gitblob blob_tree_entry(git_repository *repo, const shahex_t &tree, const std::string &entry)
 {
 	unique_ptr_gittree t(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)));
 	const git_tree_entry *e = git_tree_entry_byname(t.get(), entry.c_str());
 	if (!e || git_tree_entry_filemode(e) != GIT_FILEMODE_BLOB && git_tree_entry_filemode(e) != GIT_FILEMODE_BLOB_EXECUTABLE)
 		throw PsConExc();
-	unique_ptr_gitblob b(ns_git::blob_lookup(repo, *git_tree_entry_id(e)));
+	return ns_git::blob_lookup(repo, *git_tree_entry_id(e));
+}
+
+std::string blob_tree_entry_content(git_repository *repo, const shahex_t &tree, const std::string &entry)
+{
+	unique_ptr_gitblob b(blob_tree_entry(repo, tree, entry));
 	std::string content((const char *)git_blob_rawcontent(b.get()), (size_t)git_blob_rawsize(b.get()));
 	return content;
 }
@@ -466,41 +472,49 @@ void _git_checkout_obj(git_repository *repo, const shahex_t &tree, const std::st
 
 int main(int argc, char **argv)
 {
+	bool arg_skipselfupdate = false;
 	for (size_t i = 1; i < argc; ++i)
 		if (std::string(argv[i]) == "--tryout")
 			return 123;
+	for (size_t i = 1; i < argc; ++i)
+		if (std::string(argv[i]) == "--skipselfupdate")
+			arg_skipselfupdate = true;
 
 	git_libgit2_init();
 
-	pt_t t = cruft_config_read();
-	std::string repodir = t.get<std::string>("REPO_DIR");
+	pt_t config = cruft_config_read();
 	boost::filesystem::path chkoutdir = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("chk_%%%%-%%%%-%%%%-%%%%");
-	boost::filesystem::path curexepath(cruft_current_executable_filename());
 
-	std::cout << "repodir: " << repodir << std::endl;
-	std::cout << "chkodir: " << chkoutdir.string() << std::endl;
+	unique_ptr_gitrepository repo(_git_repository_ensure(config.get<std::string>("REPO_DIR")));
 
-	unique_ptr_gitrepository repo(_git_repository_ensure(repodir));
-
-	PsConTest client(t.get<std::string>("ORIGIN_DOMAIN_API"), t.get<std::string>("LISTEN_PORT"));
-
+	PsConTest client(config.get<std::string>("ORIGIN_DOMAIN_API"), config.get<std::string>("LISTEN_PORT"));
 	shahex_t head = get_head(&client, "master");
-	std::vector<shahex_t> trees = get_trees_writing(&client, repo.get(), head);
-	std::vector<shahex_t> blobs = get_blobs_writing(&client, repo.get(), trees);
 
-	_git_checkout_obj(repo.get(), head, chkoutdir.string());
-
+	std::cout << "repodir: " << git_repository_path(repo.get()) << std::endl;
+	std::cout << "chkodir: " << chkoutdir.string() << std::endl;
 	std::cout << "head: " << head << std::endl;
 
-	assert(content_tree_entry_blob(repo.get(), head, "a.txt") == "aaa");
+	std::vector<shahex_t> trees = get_trees_writing(&client, repo.get(), head);
+	std::vector<shahex_t> blobs = get_blobs_writing(&client, repo.get(), trees);
+	_git_checkout_obj(repo.get(), head, chkoutdir.string());
 
-#ifndef _PS_UPDATER_TESTING
-	boost::filesystem::path tryout_exe_path = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("pstmp_%%%%-%%%%-%%%%-%%%%.exe");
-	file_write_moving("", tryout_exe_path, content_tree_entry_blob(repo.get(), head, "updater.exe"));
-	cruft_exec_file_expecting_ex(tryout_exe_path.string(), "--tryout", std::chrono::milliseconds(5000), 123);
-	cruft_rename_file_selfexec(tryout_exe_path.string(), cruft_current_executable_filename());
-	boost::process::spawn(cruft_current_executable_filename());
-#endif
+	do {
+		if (arg_skipselfupdate)
+			break;
+		unique_ptr_gitblob updater(blob_tree_entry(repo.get(), head, "updater.exe"));
+		git_oid curexeoid = {};
+		if (!!git_odb_hashfile(&curexeoid, cruft_current_executable_filename().c_str(), GIT_OBJ_BLOB))
+			throw PsConExc();
+		if (ns_git::hexstr_equals(ns_git::hexstr_from_oid(curexeoid), ns_git::hexstr_from_oid(*git_blob_id(updater.get()))))
+			break;
+		boost::filesystem::path tryout_exe_path = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("pstmp_%%%%-%%%%-%%%%-%%%%.exe");
+		file_write_moving("", tryout_exe_path, blob_tree_entry_content(repo.get(), head, "updater.exe"));
+		cruft_exec_file_expecting_ex(tryout_exe_path.string(), "--tryout", std::chrono::milliseconds(5000), 123);
+		cruft_rename_file_selfexec(tryout_exe_path.string(), cruft_current_executable_filename());
+		boost::process::spawn(cruft_current_executable_filename(), "--skipselfupdate");
+
+		return EXIT_SUCCESS;
+	} while (false);
 
 	return EXIT_SUCCESS;
 }
