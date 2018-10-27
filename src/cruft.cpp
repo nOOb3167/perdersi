@@ -88,7 +88,7 @@ cruft_config_read()
 	boost::property_tree::ptree pt;
 	boost::property_tree::json_parser::read_json(ss, pt);
 
-	if (pt.get<std::string>("PS_DEBUG_WAIT", "false") != "false")
+	if (pt.get<std::string>("DEBUG_WAIT", "OFF") != "OFF")
 		cruft_debug_wait();
 
 	return pt;

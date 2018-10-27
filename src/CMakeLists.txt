@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.0)
 cmake_policy(SET CMP0074 NEW) # PackageName_ROOT variables
 project(test)
 
-option(PS_WAIT_DEBUG "waits for debugger at startup (win32) (ON/OFF)" OFF)
+option(PS_DEBUG_WAIT "waits for debugger at startup (win32) (ON/OFF)" OFF)
 
 list(APPEND CMAKE_MODULE_PATH
 	${CMAKE_SOURCE_DIR}/cmake/Modules
@@ -30,9 +30,6 @@ set(PS_SRCS ${PS_SRCS} ${PS_SRCS_COMMON} ${PS_RCS} updater.cpp miniz/miniz.c)
 set(PS_INCS ${PS_INCS} ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/miniz ${LIBGIT2_INCLUDE_DIR})
 set(PS_LIBS ${PS_LIBS} Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking sfml-graphics sfml-system sfml-window Threads::Threads ${LIBGIT2_LIBRARIES} ${SHLWAPI_LIBRARIES})
 set(PS_DEFS ${PS_DEFS} _PS_UPDATER_TESTING _CRT_SECURE_NO_WARNINGS)
-if (PS_WAIT_DEBUG)
-	set(PS_DEFS ${PS_DEFS} _PS_DEBUG_WAIT)
-endif ()
 
 source_group("Source Files" FILES ${PS_SRCS})
 
@@ -59,7 +56,7 @@ find_package(Python3 REQUIRED)
 add_custom_target(Tests
 	COMMAND ${Python3_EXECUTABLE}
 		-m pytest --cov=. --cov-report term
-		--customopt_debug_wait=${PS_WAIT_DEBUG}
+		--customopt_debug_wait=${PS_DEBUG_WAIT}
 		--customopt_python_exe=${Python3_EXECUTABLE}
 		--customopt_tupdater2_exe=$<TARGET_FILE:tupdater2>
 		--customopt_tupdater3_exe=$<TARGET_FILE:tupdater3>

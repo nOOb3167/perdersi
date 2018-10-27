@@ -526,5 +526,8 @@ int main(int argc, char **argv)
 		return EXIT_SUCCESS;
 	} while (false);
 
+	boost::filesystem::path stage2 = boost::filesystem::path(cruft_current_executable_filename()).parent_path() / config.get<std::string>("UPDATER_STAGE2_EXE_RELATIVE");
+	boost::process::spawn(stage2.string());
+
 	return EXIT_SUCCESS;
 }

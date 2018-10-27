@@ -34,16 +34,23 @@ class RetCodeErr(Exception):
 class RetCode500(RetCodeErr):
     pass
 
-def _testing_make_server_config(repodir: pathlib.Path):
+def _testing_make_server_config(
+    repodir: pathlib.Path,
+    debug_wait: str = "OFF"
+):
     _config = server_config_make_default()
     _config["REPO_DIR"] = str(repodir)
     _config["TESTING"] = True
+    _config["DEBUG_WAIT"] = debug_wait
     return _config
 
-def _testing_make_server_config_env(repodir: pathlib.Path):
+def _testing_make_server_config_env(
+    repodir: pathlib.Path,
+    debug_wait: str = "OFF"
+):
     import json, os
     env = os.environ.copy()
-    env["PS_CONFIG"] = json.dumps(_testing_make_server_config(repodir))
+    env["PS_CONFIG"] = json.dumps(_testing_make_server_config(repodir, debug_wait))
     return env
 
 def _testing_make_server_config_env_(_dict: dict):
@@ -90,8 +97,9 @@ def rc_s(
         rc.repo.index.add([ff[0]])
     # END populate with dummy data
     # BEG populate with tupdater
-    shutil.copyfile(customopt_tupdater3_exe, str(rc.repodir.joinpath("updater.exe")))
-    rc.repo.index.add(["updater.exe"])
+    for gg in [("updater.exe", customopt_tupdater3_exe), ("stage2.exe", customopt_tupdater3_exe)]:
+        shutil.copyfile(gg[1], str(rc.repodir.joinpath(gg[0])))
+        rc.repo.index.add([gg[0]])
     # END populate with tupdater
     commit = rc.repo.index.commit("ccc")
     ref_master = git.Reference(rc.repo, "refs/heads/master")
@@ -261,7 +269,7 @@ def test_get_head_blobs(
     trees: List[shahex] = _get_trees(client, rc.repo.odb, master_tree)
     blobs: List[shahex] = _list_tree_blobs(rc.repo.odb, trees)
     _get_blobs(client, rc.repo.odb, blobs)
-    assert len(blobs) == 3
+    assert len(blobs) == 4
 
 def test_commit_head(
     rc: ServerRepoCtx,
@@ -286,6 +294,7 @@ def test_checkout_head(
     rc.repo.head.reset(master.commit, index=True, working_tree=True)
 
 def test_updater_reexec(
+    customopt_debug_wait: str,
     tmpdir_factory,
     customopt_tupdater2_exe: str,
     customopt_tupdater3_exe: str
@@ -296,7 +305,7 @@ def test_updater_reexec(
     temp3_exe: pathlib.Path = tmpdir.joinpath("tupdater3.exe")
     shutil.copyfile(customopt_tupdater2_exe, str(temp2_exe))
     shutil.copyfile(customopt_tupdater3_exe, str(temp3_exe))
-    p0 = subprocess.Popen([str(temp2_exe)], env=_testing_make_server_config_env_(_dict={ "TUPDATER3_EXE": str(temp3_exe) }))
+    p0 = subprocess.Popen([str(temp2_exe)], env=_testing_make_server_config_env_(_dict={ "TUPDATER3_EXE": str(temp3_exe), "DEBUG_WAIT": customopt_debug_wait }))
     p0.wait()
     if p0.returncode != 0:
         raise RetCodeErr()
@@ -311,8 +320,8 @@ def test_updater(
 ):
     import subprocess
 
-    p0 = subprocess.Popen([customopt_updater_exe], env=_testing_make_server_config_env(repodir=repodir_updater))
-    p1 = subprocess.Popen([customopt_python_exe, "server.py"], env=_testing_make_server_config_env(repodir=repodir_s))
+    p0 = subprocess.Popen([customopt_updater_exe], env=_testing_make_server_config_env(repodir=repodir_updater, debug_wait=customopt_debug_wait))
+    p1 = subprocess.Popen([customopt_python_exe, "server.py"], env=_testing_make_server_config_env(repodir=repodir_s, debug_wait=customopt_debug_wait))
     try: p0.communicate(timeout=(None if customopt_debug_wait == "ON" else 10))
     except: pass
     try: p0.kill()
