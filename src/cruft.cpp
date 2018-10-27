@@ -1,6 +1,9 @@
 #include <sstream>
 #include <stdexcept>
 
+#include <boost/filesystem.hpp>
+#include <boost/process.hpp>
+
 #include <cruft.h>
 
 #ifdef _WIN32
@@ -32,6 +35,26 @@ cruft_rename_file_file(
 	BOOL ok = MoveFileEx(src_filename.c_str(), dst_filename.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
 	if (!ok)
 		throw std::runtime_error("rename");
+}
+
+void
+cruft_rename_file_selfexec(
+	std::string src_filename,
+	std::string dst_filename)
+{
+	cruft_rename_file_file(dst_filename, boost::filesystem::path(dst_filename).replace_extension(".old").string());
+	cruft_rename_file_file(src_filename, dst_filename);
+}
+
+void
+cruft_exec_file_expecting(
+	std::string exec_filename,
+	int ret_expected)
+{
+	boost::process::child process(exec_filename);
+	process.wait();
+	if (process.exit_code() != ret_expected)
+		throw std::runtime_error("process exit code");
 }
 
 void
