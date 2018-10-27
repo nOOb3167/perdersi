@@ -20,34 +20,7 @@
 #include <git2.h>
 #include <miniz.h>
 
-#if defined(WIN32) || defined(_WIN32)
-#include <windows.h>
-std::string current_executable_filename()
-{
-	std::string fname(1024, '\0');
-
-	DWORD LenFileName = GetModuleFileName(NULL, (char *) fname.data(), (DWORD)fname.size());
-	if (!(LenFileName != 0 && LenFileName < fname.size()))
-		throw std::runtime_error("current executable filename");
-	fname.resize(LenFileName);
-
-	return fname;
-}
-
-// https://stackoverflow.com/questions/3156841/boostfilesystemrename-cannot-create-a-file-when-that-file-already-exists
-// https://docs.microsoft.com/en-us/windows/desktop/api/winbase/nf-winbase-movefileexa
-//    If the destination is on another drive, you must set the MOVEFILE_COPY_ALLOWED flag in dwFlags.
-//    (Running executable cannot replace itself by copy)
-void rename_file_file(
-	std::string src_filename,
-	std::string dst_filename)
-{
-	BOOL ok = MoveFileEx(src_filename.c_str(), dst_filename.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
-	if (!ok)
-		throw std::runtime_error("rename");
-}
-#endif
-
+#include <cruft.h>
 
 template<typename T>
 using sp = ::std::shared_ptr<T>;
@@ -61,27 +34,6 @@ typedef ::std::unique_ptr<git_odb, void(*)(git_odb *)> unique_ptr_gitodb;
 typedef ::std::unique_ptr<git_repository, void(*)(git_repository *)> unique_ptr_gitrepository;
 typedef ::std::unique_ptr<git_signature, void(*)(git_signature *)> unique_ptr_gitsignature;
 typedef ::std::unique_ptr<git_tree, void(*)(git_tree *)> unique_ptr_gittree;
-
-void waitdebug()
-{
-#if defined(_PS_DEBUG_WAIT) && defined(WIN32)
-	MessageBoxA(NULL, "Attach Debugger", "", MB_OK);
-	if (IsDebuggerPresent())
-		__debugbreak();
-#endif
-}
-
-pt_t readconfig()
-{
-	if (! getenv("PS_CONFIG"))
-		throw std::runtime_error("config");
-	// FIXME: informational output
-	std::cout << "config: " << getenv("PS_CONFIG") << std::endl;
-	std::stringstream ss(getenv("PS_CONFIG"));
-	boost::property_tree::ptree pt;
-	boost::property_tree::json_parser::read_json(ss, pt);
-	return pt;
-}
 
 void file_write_moving(const std::string &finalpathdir_creation_lump_check, const boost::filesystem::path &finalpath, const std::string &content)
 {
@@ -106,7 +58,7 @@ void file_write_moving(const std::string &finalpathdir_creation_lump_check, cons
 	if (! ff.good())
 		throw std::runtime_error("file write");
 	/* write final */
-	rename_file_file(temppath.string(), finalpath.string());
+	cruft_rename_file_file(temppath.string(), finalpath.string());
 }
 
 void reexec_tryout_and_move(const boost::filesystem::path &temp_exe_path, const boost::filesystem::path &final_exe_path)
@@ -123,8 +75,8 @@ void reexec_tryout_and_move(const boost::filesystem::path &temp_exe_path, const 
 	if (c.exit_code() != 123)
 		throw std::runtime_error("reexec tryout code");
 	// rename dance final->old temp->final
-	rename_file_file(final_exe_path.string(), boost::filesystem::path(final_exe_path).replace_extension(".old").string());
-	rename_file_file(temp_exe_path.string(), final_exe_path.string());
+	cruft_rename_file_file(final_exe_path.string(), boost::filesystem::path(final_exe_path).replace_extension(".old").string());
+	cruft_rename_file_file(temp_exe_path.string(), final_exe_path.string());
 }
 
 void reexec_forget(const boost::filesystem::path &exe_path)
@@ -567,12 +519,10 @@ int main(int argc, char **argv)
 
 	git_libgit2_init();
 
-	waitdebug();
-
-	pt_t t = readconfig();
+	pt_t t = cruft_config_read();
 	std::string repodir = t.get<std::string>("REPO_DIR");
 	boost::filesystem::path chkoutdir = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("chk_%%%%-%%%%-%%%%-%%%%");
-	boost::filesystem::path curexepath(current_executable_filename());
+	boost::filesystem::path curexepath(cruft_current_executable_filename());
 
 	std::cout << "repodir: " << repodir << std::endl;
 	std::cout << "chkodir: " << chkoutdir.string() << std::endl;
