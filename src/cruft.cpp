@@ -27,13 +27,13 @@ cruft_current_executable_filename()
 // https://stackoverflow.com/questions/3156841/boostfilesystemrename-cannot-create-a-file-when-that-file-already-exists
 // https://docs.microsoft.com/en-us/windows/desktop/api/winbase/nf-winbase-movefileexa
 //    If the destination is on another drive, you must set the MOVEFILE_COPY_ALLOWED flag in dwFlags.
-//    (Running executable cannot replace itself by copy)
+//    Interdrive move attempt causes copy which is unable to displace a/the running executable.
 void
 cruft_rename_file_file(
 	std::string src_filename,
 	std::string dst_filename)
 {
-	BOOL ok = MoveFileEx(src_filename.c_str(), dst_filename.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+	BOOL ok = MoveFileEx(src_filename.c_str(), dst_filename.c_str(), MOVEFILE_COPY_ALLOWED | MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
 	if (!ok)
 		throw std::runtime_error("rename");
 }
