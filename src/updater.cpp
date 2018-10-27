@@ -61,29 +61,6 @@ void file_write_moving(const std::string &finalpathdir_creation_lump_check, cons
 	cruft_rename_file_file(temppath.string(), finalpath.string());
 }
 
-void reexec_tryout_and_move(const boost::filesystem::path &temp_exe_path, const boost::filesystem::path &final_exe_path)
-{
-	if (!boost::regex_search(temp_exe_path.string().c_str(), boost::cmatch(), boost::regex(".exe$")) ||
-		!boost::regex_search(final_exe_path.string().c_str(), boost::cmatch(), boost::regex(".exe$")))
-	{
-		throw std::runtime_error("reexec tryout path");
-	}
-	// tryout
-	boost::process::child c(temp_exe_path, "--tryout");
-	if (!c.wait_for(std::chrono::milliseconds(5000)))
-		throw std::runtime_error("reexec tryout wait");
-	if (c.exit_code() != 123)
-		throw std::runtime_error("reexec tryout code");
-	// rename dance final->old temp->final
-	cruft_rename_file_file(final_exe_path.string(), boost::filesystem::path(final_exe_path).replace_extension(".old").string());
-	cruft_rename_file_file(temp_exe_path.string(), final_exe_path.string());
-}
-
-void reexec_forget(const boost::filesystem::path &exe_path)
-{
-	boost::process::spawn(exe_path);
-}
-
 namespace ns_git
 {
 
@@ -253,12 +230,6 @@ public:
 	{}
 };
 
-void enz(bool w)
-{
-	if (! w)
-		throw PsConExc();
-}
-
 class PsCon
 {
 public:
@@ -323,6 +294,24 @@ public:
 	sp<tcp::socket> m_socket;
 };
 
+class PsConTest : public PsCon
+{
+public:
+	PsConTest(const std::string &host, const std::string &port) :
+		PsCon(host, port)
+	{};
+
+	res_t reqPost_(const std::string &path, const std::string &data) override
+	{
+		boost::cmatch what;
+		if (boost::regex_search(path.c_str(), what, boost::regex("/objects/([[:xdigit:]]{2})/([[:xdigit:]]{38})"), boost::match_continuous))
+			m_objects_requested.push_back(boost::algorithm::to_lower_copy(what[1].str() + what[2].str()));
+		return PsCon::reqPost_(path, data);
+	}
+
+	std::vector<shahex_t> m_objects_requested;
+};
+
 std::string get_object(PsCon *client, const shahex_t &obj)
 {
 	std::string loose = client->reqPost_("/objects/" + obj.substr(0, 2) + "/" + obj.substr(2), "").body();
@@ -357,7 +346,7 @@ void ensure_object_match(const shahex_t &obj_expected, const std::string &incomi
 void get_write_object_raw(git_repository *repo, const shahex_t &obj, const std::string &incoming_loose)
 {
 	ensure_object_match(obj, incoming_loose);
-	assert(!!git_repository_path(repo));
+	assert(git_repository_path(repo));
 	const boost::filesystem::path objectpath = boost::filesystem::path(git_repository_path(repo)) / "objects" / obj.substr(0, 2) / obj.substr(2);
 	file_write_moving(".git", objectpath, incoming_loose);
 }
@@ -447,17 +436,17 @@ void create_ref(git_repository *repo, const std::string &refname, const git_oid 
 
 unique_ptr_gitrepository _git_repository_ensure(const std::string &repopath)
 {
+	int err = 0;
 	git_repository *repo = NULL;
 	git_repository_init_options init_options = GIT_REPOSITORY_INIT_OPTIONS_INIT;
 	init_options.flags = GIT_REPOSITORY_INIT_NO_REINIT | GIT_REPOSITORY_INIT_MKDIR;
 	assert(init_options.version == 1);
 
-	int err = git_repository_init_ext(&repo, repopath.c_str(), &init_options);
-	if (!!err && err == GIT_EEXISTS)
-		return unique_ptr_gitrepository(ns_git::repository_open(repopath.c_str()));
-	if (!!err)
+	if (!!(err = git_repository_init_ext(&repo, repopath.c_str(), &init_options))) {
+		if (err == GIT_EEXISTS)
+			return unique_ptr_gitrepository(ns_git::repository_open(repopath.c_str()));
 		throw std::runtime_error("ensure repository init");
-
+	}
 	return unique_ptr_gitrepository(repo, ns_git::repo_delete);
 }
 
@@ -465,51 +454,15 @@ void _git_checkout_obj(git_repository *repo, const shahex_t &tree, const std::st
 {
 	if (!boost::regex_search(chkoutdir.c_str(), boost::cmatch(), boost::regex("chk")))
 		throw std::runtime_error("checkout sanity");
-
-	unique_ptr_gittree _tree(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)));
-
-	/* https://libgit2.github.com/docs/guides/101-samples/#objects_casting */
-	// FIXME: reevaluate checkout_strategy flag GIT_CHECKOUT_REMOVE_UNTRACKED
-
+	// FIXME: consider GIT_CHECKOUT_REMOVE_UNTRACKED
 	git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
 	opts.checkout_strategy = GIT_CHECKOUT_FORCE;
 	opts.disable_filters = 1;
 	opts.target_directory = chkoutdir.c_str();
-
+	unique_ptr_gittree _tree(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)));
 	if (!!git_checkout_tree(repo, (git_object *) _tree.get(), &opts))
 		throw std::runtime_error("checkout tree");
 }
-
-#ifndef _PS_UPDATER_TESTING
-
-int main(int argc, char **argv)
-{
-  git_libgit2_init();
-
-  PsCon client("perder.si", "5201");
-  
-  return EXIT_SUCCESS;
-}
-
-#else /* _PS_UPDATER_TESTING */
-
-class PsConTest : public PsCon
-{
-public:
-	PsConTest(const std::string &host, const std::string &port) :
-		PsCon(host, port)
-	{};
-
-	res_t reqPost_(const std::string &path, const std::string &data) override
-	{
-		boost::cmatch what;
-		if (boost::regex_search(path.c_str(), what, boost::regex("/objects/([[:xdigit:]]{2})/([[:xdigit:]]{38})"), boost::match_continuous))
-			m_objects_requested.push_back(boost::algorithm::to_lower_copy(what[1].str() + what[2].str()));
-		return PsCon::reqPost_(path, data);
-	}
-
-	std::vector<shahex_t> m_objects_requested;
-};
 
 int main(int argc, char **argv)
 {
@@ -542,14 +495,12 @@ int main(int argc, char **argv)
 	assert(content_tree_entry_blob(repo.get(), head, "a.txt") == "aaa");
 
 #ifndef _PS_UPDATER_TESTING
-	std::string exe_content = content_tree_entry_blob(repo.get(), head, "updater.exe");
 	boost::filesystem::path tryout_exe_path = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("pstmp_%%%%-%%%%-%%%%-%%%%.exe");
-	file_write_moving("", tryout_exe_path, exe_content);
-	reexec_tryout_and_move(tryout_exe_path, curexepath);
-	reexec_forget(curexepath);
+	file_write_moving("", tryout_exe_path, content_tree_entry_blob(repo.get(), head, "updater.exe"));
+	cruft_exec_file_expecting_ex(tryout_exe_path.string(), "--tryout", std::chrono::milliseconds(5000), 123);
+	cruft_rename_file_selfexec(tryout_exe_path.string(), cruft_current_executable_filename());
+	boost::process::spawn(cruft_current_executable_filename());
 #endif
 
 	return EXIT_SUCCESS;
 }
-
-#endif /* _PS_UPDATER_TESTING */

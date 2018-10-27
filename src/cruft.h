@@ -1,6 +1,7 @@
 #ifndef _CRUFT_H_
 #define _CRUFT_H_
 
+#include <chrono>
 #include <string>
 
 #include <boost/property_tree/json_parser.hpp>
@@ -13,6 +14,8 @@ void
 cruft_rename_file_selfexec(std::string src_filename, std::string dst_filename);
 void
 cruft_exec_file_expecting(std::string exec_filename, int ret_expected);
+void
+cruft_exec_file_expecting_ex(std::string exec_filename, std::string arg_opt, std::chrono::milliseconds wait_ms, int ret_expected);
 void
 cruft_debug_wait();
 boost::property_tree::ptree
