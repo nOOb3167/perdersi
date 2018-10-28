@@ -294,8 +294,8 @@ def test_checkout_head(
     rc.repo.head.reset(master.commit, index=True, working_tree=True)
 
 def test_updater_reexec(
-    customopt_debug_wait: str,
     tmpdir_factory,
+    customopt_debug_wait: str,
     customopt_tupdater2_exe: str,
     customopt_tupdater3_exe: str
 ):
@@ -319,10 +319,10 @@ def test_updater(
     client: flask.testing.FlaskClient
 ):
     import subprocess
-
+    
     p0 = subprocess.Popen([customopt_updater_exe], env=_testing_make_server_config_env(repodir=repodir_updater, debug_wait=customopt_debug_wait))
     p1 = subprocess.Popen([customopt_python_exe, "server.py"], env=_testing_make_server_config_env(repodir=repodir_s, debug_wait=customopt_debug_wait))
-    try: p0.communicate(timeout=(None if customopt_debug_wait == "ON" else 10))
+    try: p0.communicate(timeout=(None if customopt_debug_wait != "OFF" else 10))
     except: pass
     try: p0.kill()
     except: pass

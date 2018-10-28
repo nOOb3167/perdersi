@@ -76,7 +76,7 @@ cruft_debug_wait()
 {
 	MessageBoxA(NULL, "Attach Debugger", cruft_current_executable_filename().c_str(), MB_OK);
 	if (IsDebuggerPresent())
-		DebugBreak();
+		__debugbreak();
 }
 
 boost::property_tree::ptree

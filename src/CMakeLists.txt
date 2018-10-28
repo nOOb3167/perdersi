@@ -26,7 +26,7 @@ if (WIN32)
 	set(PS_OPTS ${PS_OPTS} "/MT$<$<CONFIG:Debug>:d>")
 endif ()
 set(PS_INCS ${PS_INCS} ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/miniz ${LIBGIT2_INCLUDE_DIR})
-set(PS_LIBS ${PS_LIBS} Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking sfml-graphics sfml-system sfml-window Threads::Threads ${LIBGIT2_LIBRARIES} ${SHLWAPI_LIBRARIES})
+set(PS_LIBS ${PS_LIBS} Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking Threads::Threads ${LIBGIT2_LIBRARIES} ${SHLWAPI_LIBRARIES})
 set(PS_DEFS ${PS_DEFS} _PS_UPDATER_TESTING _CRT_SECURE_NO_WARNINGS)
 
 add_library(common STATIC cruft.h cruft.cpp miniz/miniz.c)
@@ -39,7 +39,7 @@ add_executable(test ${PS_RCS} updater.cpp)
 target_link_libraries(test PUBLIC common)
 
 add_executable(stage2 ${PS_RCS} stage2.cpp)
-target_link_libraries(stage2 PUBLIC common)
+target_link_libraries(stage2 PUBLIC sfml-graphics sfml-system sfml-window)
 
 add_executable(tupdater2 ${PS_RCS} tupdater.cpp)
 target_link_libraries(tupdater2 PUBLIC common)
