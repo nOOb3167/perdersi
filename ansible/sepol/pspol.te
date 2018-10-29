@@ -17,6 +17,9 @@
 #   semodule -b base.pp / Although PolicyValidate lists -B
 # https://selinuxproject.org/page/PolicyConfigurationFiles#users.2Flocal.users_File
 #   The file would contain local user definitions in the form of user statements
+# unprivuser, userdom_unpriv_user_template
+# userdom_unpriv_user_template(pspol)
+# services/ssh.if ssh_role_template(pspol, pspol_r, pspol_t
 policy_module(pspol, 1.0)
 
 role pspol_r;

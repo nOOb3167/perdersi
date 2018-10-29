@@ -4,6 +4,8 @@
 /ansible/se.retry
 /ansible/updater.retry
 /files/__pycache__
+/files/config_*.py
+!/files/config_updater_default.py
 /ansible/sepol/pspol.pp
 /ansible/sepol/reload.stamp
 /ansible/sepol/tmp

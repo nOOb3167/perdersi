@@ -13,6 +13,7 @@ cmake_policy(SET CMP0074 NEW) # PackageName_ROOT variables
 project(test)
 
 option(PS_DEBUG_WAIT "waits for debugger at startup (win32) (ON/OFF)" OFF)
+set(PS_CONFIG_PYTHON_MODULE_NAME config_updater_default CACHE STRING "")
 
 list(APPEND CMAKE_MODULE_PATH
 	${CMAKE_SOURCE_DIR}/cmake/Modules
@@ -29,7 +30,7 @@ if (WIN32)
 	set(PS_RCS ${PS_RCS} updater.rc)
 	set(PS_LIBS ${PS_LIBS} winhttp Rpcrt4 crypt32)
 endif ()
-set(PS_INCS ${PS_INCS} ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/miniz ${LIBGIT2_INCLUDE_DIR})
+set(PS_INCS ${PS_INCS} ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/miniz ${LIBGIT2_INCLUDE_DIR})
 set(PS_LIBS ${PS_LIBS} Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking Threads::Threads ${LIBGIT2_LIBRARIES} ${SHLWAPI_LIBRARIES})
 set(PS_DEFS ${PS_DEFS} _PS_UPDATER_TESTING _CRT_SECURE_NO_WARNINGS)
 
@@ -39,7 +40,7 @@ target_compile_definitions(common PUBLIC ${PS_DEFS})
 target_compile_options(common PUBLIC ${PS_OPTS})
 target_include_directories(common PUBLIC ${PS_INCS})
 
-add_executable(test ${PS_RCS} updater.cpp)
+add_executable(test ${PS_RCS} updater.cpp ps_config.h)
 target_link_libraries(test PUBLIC common)
 
 add_executable(stage2 ${PS_RCS} stage2.cpp)
@@ -54,6 +55,22 @@ target_link_libraries(tupdater3 PUBLIC common)
 target_compile_definitions(tupdater3 PUBLIC _PS_DEBUG_TUPDATER=3)
 
 find_package(Python3 REQUIRED)
+
+macro(ps_generate_header _CONFIG_PYTHON_MODULE_NAME)
+	add_custom_command(
+		OUTPUT ${CMAKE_BINARY_DIR}/ps_config.h
+		COMMAND ${Python3_EXECUTABLE}
+			${CMAKE_SOURCE_DIR}/../files/genhdr.py
+			--src_mod ${_CONFIG_PYTHON_MODULE_NAME}
+			--dst ${CMAKE_BINARY_DIR}/ps_config.h
+		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/../files
+		DEPENDS
+			${CMAKE_SOURCE_DIR}/../files/genhdr.py
+			${CMAKE_SOURCE_DIR}/../files/${_CONFIG_PYTHON_MODULE_NAME}.py
+		COMMENT "Generating Header"
+	)
+endmacro()
+ps_generate_header(${PS_CONFIG_PYTHON_MODULE_NAME})
 
 add_custom_target(Tests
 	COMMAND ${Python3_EXECUTABLE}

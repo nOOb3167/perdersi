@@ -6,6 +6,7 @@
 #include <boost/regex.hpp>
 
 #include <cruft.h>
+#include <ps_config.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -110,9 +111,8 @@ cruft_debug_wait()
 boost::property_tree::ptree
 cruft_config_read()
 {
-	if (! getenv("PS_CONFIG"))
-		throw std::runtime_error("config");
-	std::stringstream ss(getenv("PS_CONFIG"));
+	std::stringstream ss(getenv("PS_CONFIG") ? getenv("PS_CONFIG") : std::string(g_ps_config, sizeof g_ps_config));
+
 	boost::property_tree::ptree pt;
 	boost::property_tree::json_parser::read_json(ss, pt);
 

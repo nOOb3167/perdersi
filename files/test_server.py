@@ -2,7 +2,6 @@ import flask.testing
 import git
 from git.objects.fun import (tree_entries_from_data as git_objects_fun_tree_entries_from_data)
 from gitdb.db.loose import (LooseObjectDB as gitdb_db_loose_LooseObjectDB)
-from json import (loads as json_loads)
 from os import (makedirs as os_makedirs)
 from os.path import (dirname as os_path_dirname,
                      exists as os_path_exists,
