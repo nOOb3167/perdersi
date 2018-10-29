@@ -311,6 +311,7 @@ def test_updater_reexec(
         raise RetCodeErr()
 
 def test_updater(
+    tmpdir_factory,
     customopt_debug_wait: str,
     customopt_python_exe: str,
     customopt_updater_exe: str,
@@ -318,9 +319,12 @@ def test_updater(
     repodir_s: pathlib.Path,
     client: flask.testing.FlaskClient
 ):
-    import subprocess
+    import shutil, subprocess
     
-    p0 = subprocess.Popen([customopt_updater_exe], env=_testing_make_server_config_env(repodir=repodir_updater, debug_wait=customopt_debug_wait))
+    updater_exe: str = str(pathlib_Path(tmpdir_factory.mktemp("updater")).joinpath("updater.exe"))
+    shutil.copyfile(customopt_updater_exe, str(updater_exe))
+    
+    p0 = subprocess.Popen([updater_exe], env=_testing_make_server_config_env(repodir=repodir_updater, debug_wait=customopt_debug_wait))
     p1 = subprocess.Popen([customopt_python_exe, "server.py"], env=_testing_make_server_config_env(repodir=repodir_s, debug_wait=customopt_debug_wait))
     try: p0.communicate(timeout=(None if customopt_debug_wait != "OFF" else 10))
     except: pass

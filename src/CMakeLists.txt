@@ -2,6 +2,11 @@
 # LIBGIT2_INCLUDE_DIR LIBGIT2_LIBRARIES
 # Python3_ROOT_DIR
 # SFML_ROOT (lib/cmake/SFML)
+# #
+# # = Achieve extra staticness =
+# #set(Boost_USE_STATIC_RUNTIME ON)
+# #set(PS_OPTS ${PS_OPTS} "/MT$<$<CONFIG:Debug>:d>")
+# # libgit2 -DSTATIC_CRT=OFF
 cmake_minimum_required(VERSION 3.0)
 cmake_policy(SET CMP0074 NEW) # PackageName_ROOT variables
 project(test)
@@ -14,7 +19,6 @@ list(APPEND CMAKE_MODULE_PATH
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 set(Boost_USE_STATIC_LIBS ON)
-set(Boost_USE_STATIC_RUNTIME ON)
 find_package(Boost 1.66 REQUIRED COMPONENTS date_time filesystem regex)
 find_package(LibGit2 REQUIRED)
 set(SFML_STATIC_LIBRARIES ON)
@@ -23,7 +27,6 @@ find_package(SFML CONFIG COMPONENTS graphics system window REQUIRED)
 if (WIN32)
 	set(PS_RCS ${PS_RCS} updater.rc)
 	set(PS_LIBS ${PS_LIBS} winhttp Rpcrt4 crypt32)
-	set(PS_OPTS ${PS_OPTS} "/MT$<$<CONFIG:Debug>:d>")
 endif ()
 set(PS_INCS ${PS_INCS} ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/miniz ${LIBGIT2_INCLUDE_DIR})
 set(PS_LIBS ${PS_LIBS} Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking Threads::Threads ${LIBGIT2_LIBRARIES} ${SHLWAPI_LIBRARIES})

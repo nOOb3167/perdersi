@@ -1,8 +1,8 @@
+#include <cassert>
 #include <sstream>
 #include <stdexcept>
 
 #include <boost/filesystem.hpp>
-#include <boost/process.hpp>
 #include <boost/regex.hpp>
 
 #include <cruft.h>
@@ -49,13 +49,43 @@ cruft_rename_file_selfexec(
 	cruft_rename_file_file(src_filename, dst_filename);
 }
 
-void
-cruft_exec_file_expecting(std::string exec_filename,int ret_expected)
+int
+cruft_exec_file_lowlevel(
+	const std::string &exec_filename,
+	const std::vector<std::string> &args,
+	const std::chrono::milliseconds &wait_ms)
 {
-	boost::process::child process(exec_filename);
-	process.wait();
-	if (process.exit_code() != ret_expected)
-		throw std::runtime_error("process exit code");
+	std::stringstream ss;
+	ss << "\"" << exec_filename << "\"";
+	for (const auto &arg : args)
+		ss << " " << "\"" << arg << "\"";
+	ss.write("\0", 1);
+
+	PROCESS_INFORMATION pi = {};
+	STARTUPINFO si = {};
+	si.cb = sizeof si;
+
+	std::unique_ptr<HANDLE, void (*)(HANDLE *)> pt(&pi.hThread, [](HANDLE *p) { if (*p && !CloseHandle(*p)) assert(0); });
+	std::unique_ptr<HANDLE, void (*)(HANDLE *)> pp(&pi.hProcess, [](HANDLE *p) { if (*p && !CloseHandle(*p)) assert(0); });
+
+	if (!CreateProcess(exec_filename.c_str(), (LPSTR) ss.str().data(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+		throw std::runtime_error("process exec file");
+	if (!wait_ms.count())
+		return 0;
+	DWORD exitcode = 0;
+	if (WaitForSingleObject(pi.hProcess, (DWORD)(wait_ms.count() == 0xFFFFFFFF ? INFINITE : wait_ms.count())) != WAIT_OBJECT_0 ||
+		GetExitCodeProcess(pi.hProcess, &exitcode) == 0)
+	{
+		throw std::runtime_error("process exec code");
+	}
+	return exitcode;
+}
+
+void
+cruft_exec_file_expecting(std::string exec_filename, int ret_expected)
+{
+	if (cruft_exec_file_lowlevel(exec_filename, {}, std::chrono::milliseconds(0xFFFFFFFF)) != ret_expected)
+		throw std::runtime_error("process exec code check");
 }
 
 void
@@ -65,10 +95,8 @@ cruft_exec_file_expecting_ex(
 	std::chrono::milliseconds wait_ms,
 	int ret_expected)
 {
-	boost::process::child process(exec_filename, arg_opt);
-	process.wait_for(wait_ms);
-	if (process.running() || process.exit_code() != ret_expected)
-		throw std::runtime_error("process exit code");
+	if (cruft_exec_file_lowlevel(exec_filename, { arg_opt }, wait_ms) != ret_expected)
+		throw std::runtime_error("process exec code check");
 }
 
 void

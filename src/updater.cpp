@@ -14,7 +14,6 @@
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/filesystem.hpp>
-#include <boost/process.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/regex.hpp>
 #include <git2.h>
@@ -521,13 +520,13 @@ int main(int argc, char **argv)
 		cruft_rename_file_selfexec(tryout_exe_path.string(), cruft_current_executable_filename());
 		if (file_read(cruft_current_executable_filename()) != updater_content)
 			throw std::runtime_error("failed updating");
-		boost::process::spawn(cruft_current_executable_filename(), "--skipselfupdate");
+		cruft_exec_file_lowlevel(cruft_current_executable_filename(), { "--skipselfupdate" }, std::chrono::milliseconds(0));
 
 		return EXIT_SUCCESS;
 	} while (false);
 
 	boost::filesystem::path stage2 = boost::filesystem::path(cruft_current_executable_filename()).parent_path() / config.get<std::string>("UPDATER_STAGE2_EXE_RELATIVE");
-	boost::process::spawn(stage2.string());
+	cruft_exec_file_lowlevel(stage2.string(), {}, std::chrono::milliseconds(0));
 
 	return EXIT_SUCCESS;
 }
