@@ -4,6 +4,7 @@
 # SFML_ROOT (lib/cmake/SFML)
 # #
 # # = Achieve extra staticness =
+# # SFML -DBUILD_SHARED_LIBS=OFF -DSFML_USE_STATIC_STD_LIBS=ON
 # #set(Boost_USE_STATIC_RUNTIME ON)
 # #set(PS_OPTS ${PS_OPTS} "/MT$<$<CONFIG:Debug>:d>")
 # # libgit2 -DSTATIC_CRT=OFF
@@ -42,7 +43,7 @@ add_executable(test ${PS_RCS} updater.cpp)
 target_link_libraries(test PUBLIC common)
 
 add_executable(stage2 ${PS_RCS} stage2.cpp)
-target_link_libraries(stage2 PUBLIC sfml-graphics sfml-system sfml-window)
+target_link_libraries(stage2 PUBLIC common sfml-graphics sfml-system sfml-window)
 
 add_executable(tupdater2 ${PS_RCS} tupdater.cpp)
 target_link_libraries(tupdater2 PUBLIC common)
