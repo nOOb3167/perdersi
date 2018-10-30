@@ -13,7 +13,8 @@ cmake_policy(SET CMP0074 NEW) # PackageName_ROOT variables
 project(test)
 
 option(PS_DEBUG_WAIT "waits for debugger at startup (win32) (ON/OFF)" OFF)
-set(PS_CONFIG_PYTHON_MODULE_NAME config_updater_default CACHE STRING "")
+set(PS_CONFIG_UPDATER_PYTHON_MODULE_NAME config_updater_default CACHE STRING "")
+set(PS_CONFIG_SERVER_PYTHON_MODULE_NAME config_server_default CACHE STRING "")
 
 list(APPEND CMAKE_MODULE_PATH
 	${CMAKE_SOURCE_DIR}/cmake/Modules
@@ -40,7 +41,7 @@ target_compile_definitions(common PUBLIC ${PS_DEFS})
 target_compile_options(common PUBLIC ${PS_OPTS})
 target_include_directories(common PUBLIC ${PS_INCS})
 
-add_executable(test ${PS_RCS} updater.cpp ps_config.h)
+add_executable(test ${PS_RCS} updater.cpp ps_config_updater.h)
 target_link_libraries(test PUBLIC common)
 
 add_executable(stage2 ${PS_RCS} stage2.cpp)
@@ -56,31 +57,56 @@ target_compile_definitions(tupdater3 PUBLIC _PS_DEBUG_TUPDATER=3)
 
 find_package(Python3 REQUIRED)
 
-macro(ps_generate_header _CONFIG_PYTHON_MODULE_NAME)
+macro(ps_generate_header _CONFIG_UPDATER_PYTHON_MODULE_NAME _CONFIG_SERVER_PYTHON_MODULE_NAME)
 	add_custom_command(
-		OUTPUT ${CMAKE_BINARY_DIR}/ps_config.h
+		OUTPUT ${CMAKE_BINARY_DIR}/ps_config_updater.h
 		COMMAND ${Python3_EXECUTABLE}
 			${CMAKE_SOURCE_DIR}/../files/genhdr.py
-			--src_mod ${_CONFIG_PYTHON_MODULE_NAME}
-			--dst ${CMAKE_BINARY_DIR}/ps_config.h
-		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/../files
+			--src_mod ${_CONFIG_UPDATER_PYTHON_MODULE_NAME}
+			--dst ${CMAKE_BINARY_DIR}/ps_config_updater.h
 		DEPENDS
 			${CMAKE_SOURCE_DIR}/../files/genhdr.py
-			${CMAKE_SOURCE_DIR}/../files/${_CONFIG_PYTHON_MODULE_NAME}.py
-		COMMENT "Generating Header"
+			${CMAKE_SOURCE_DIR}/../files/${_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py
+		COMMENT "Generating Header (Updater)"
+	)
+	add_custom_command(
+		OUTPUT ${CMAKE_BINARY_DIR}/ps_config_server.py
+		COMMAND ${CMAKE_COMMAND}
+			-E copy
+			${CMAKE_SOURCE_DIR}/../files/${_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
+			${CMAKE_BINARY_DIR}/ps_config_server.py
+		DEPENDS
+			${CMAKE_SOURCE_DIR}/../files/${_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
+		COMMENT "Generating Header (Server)"
 	)
 endmacro()
-ps_generate_header(${PS_CONFIG_PYTHON_MODULE_NAME})
+ps_generate_header(${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME} ${PS_CONFIG_SERVER_PYTHON_MODULE_NAME})
+
+add_custom_target(TestsRunServer
+	COMMAND ${CMAKE_COMMAND}
+		-E env
+			"PYTHONPATH=${CMAKE_BINARY_DIR}"
+		${Python3_EXECUTABLE}
+			${CMAKE_SOURCE_DIR}/../files/server.py
+	DEPENDS
+		${CMAKE_BINARY_DIR}/ps_config_server.py
+	COMMENT "Running Server"
+)
 
 add_custom_target(Tests
-	COMMAND ${Python3_EXECUTABLE}
-		-m pytest --cov=. --cov-report term
-		--customopt_debug_wait=${PS_DEBUG_WAIT}
-		--customopt_python_exe=${Python3_EXECUTABLE}
-		--customopt_tupdater2_exe=$<TARGET_FILE:tupdater2>
-		--customopt_tupdater3_exe=$<TARGET_FILE:tupdater3>
-		--customopt_updater_exe=$<TARGET_FILE:test>
+	COMMAND ${CMAKE_COMMAND}
+		-E env
+			"PYTHONPATH=${CMAKE_BINARY_DIR}"
+		${Python3_EXECUTABLE}
+			-m pytest --cov=. --cov-report term
+			--customopt_debug_wait=${PS_DEBUG_WAIT}
+			--customopt_python_exe=${Python3_EXECUTABLE}
+			--customopt_tupdater2_exe=$<TARGET_FILE:tupdater2>
+			--customopt_tupdater3_exe=$<TARGET_FILE:tupdater3>
+			--customopt_updater_exe=$<TARGET_FILE:test>
 	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/../files
+	DEPENDS
+		${CMAKE_BINARY_DIR}/ps_config_server.py
 	COMMENT "Running Tests"
 )
 add_dependencies(Tests test tupdater2 tupdater3)

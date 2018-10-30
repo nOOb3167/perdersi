@@ -24,7 +24,6 @@ confdict = dict
 # https://stackoverflow.com/questions/13317536/get-a-list-of-all-routes-defined-in-the-app/13318415#13318415
 # https://www.python.org/dev/peps/pep-0366/  # relative import __package__ hack
 
-config: confdict = None
 server_app: flask.Flask = flask_Flask(__name__, static_url_path = "")
 
 SERVER_SESSION_KEY = 'perdersi_session'
@@ -36,8 +35,8 @@ def server_check_csrf():
         if "Origin" not in flask_request.headers:
             raise CsrfExc()
         allowed = [
-            "http://" + config["ORIGIN_DOMAIN_API"] + ":" + config["LISTEN_PORT"],
-            "http://" + config["ORIGIN_DOMAIN_APP"] + ":" + config["LISTEN_PORT"],
+            'http://' + flask_current_app.config['PS']['ORIGIN_DOMAIN_API'] + ':' + flask_current_app.config['PS']['LISTEN_PORT'],
+            'http://' + flask_current_app.config['PS']['ORIGIN_DOMAIN_APP'] + ':' + flask_current_app.config['PS']['LISTEN_PORT'],
         ]
         incoming = flask_request.headers['Origin'].split(" ")
         for i in incoming:
@@ -63,7 +62,7 @@ class ServerRepoCtx:
 def server_repo_ctx_get():
     ''' within Application Context '''
     if "rc" not in flask_g:
-        flask_g.rc = ServerRepoCtx.create_ensure(config["REPO_DIR"])
+        flask_g.rc = ServerRepoCtx.create_ensure(flask_current_app.config['PS']["REPO_DIR"])
     return flask_g.rc
 @server_app.teardown_appcontext
 def server_repo_ctx_teardown(err):
@@ -104,42 +103,27 @@ def index():
         hello world
         '''
 
-def server_config_make_default():
-    return {
-        "LISTEN_HOST": "localhost.localdomain",
-        "LISTEN_PORT": "5201",
-        "ORIGIN_DOMAIN_APP": "localhost.localdomain",
-        "ORIGIN_DOMAIN_API": "api.localhost.localdomain",
-        "REPO_DIR": "/usr/local/perdersi/repo_s" if os_name != 'nt' else "./repo_s",
-        "TESTING": False,
-    }
-
-def server_config_make_augmented():
-    conf = server_config_make_default()
-    try:
-        import json, os
-        x = json.loads(os.environ["PS_CONFIG"])
-        for k in x:
-            conf[k] = x[k]
-    except:
-        pass
-    return conf
-
-def server_config_flask():
-    global config, server_app
+def server_config_flask(_config: confdict):
+    global server_app
     server_app.secret_key = base64.b32encode(os_urandom(24)).decode("UTF-8")
-    server_app.config["SERVER_NAME"] = config["ORIGIN_DOMAIN_APP"] + ":" + config["LISTEN_PORT"]
-    server_app.config['TESTING'] = "TESTING" in config and config["TESTING"]
-
-def server_run_prepare(conf: confdict = server_config_make_default()):
-    global config
-    config = conf
-    server_config_flask()
+    server_app.config['PS'] = _config
+    server_app.config["SERVER_NAME"] = _config['ORIGIN_DOMAIN_APP'] + ':' + _config['LISTEN_PORT']
+    server_app.config['TESTING'] = "TESTING" in _config and _config['TESTING']
 
 def server_run():
     global server_app
-    server_app.run(host = config["LISTEN_HOST"], port = config["LISTEN_PORT"])
+    server_app.run(host = server_app.config['PS']['LISTEN_HOST'], port = server_app.config['PS']['LISTEN_PORT'])
 
-if __name__ == "__main__":
-    server_run_prepare(server_config_make_augmented())
+def server_run_overridable():
+    import json, os
+    conf = {}
+    try:
+        conf = json.loads(os.environ['PS_CONFIG'])
+    except:
+        import ps_config_server
+        conf = ps_config_server.config.copy()
+    server_config_flask(conf)
     server_run()
+
+if __name__ == '__main__':
+    server_run_overridable()

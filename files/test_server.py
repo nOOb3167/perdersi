@@ -11,10 +11,8 @@ from pathlib import (Path as pathlib_Path)
 import pytest
 from re import (fullmatch as re_fullmatch)
 import server
-from server import (config as server_config,
-                    server_app,
-                    server_config_make_default,
-                    server_run_prepare,
+from server import (server_app,
+                    server_config_flask,
                     ServerRepoCtx)
 from typing import Callable, List, Set, Tuple
 from zlib import (decompress as zlib_decompress)
@@ -37,7 +35,8 @@ def _testing_make_server_config(
     repodir: pathlib.Path,
     debug_wait: str = "OFF"
 ):
-    _config = server_config_make_default()
+    import ps_config_server
+    _config = ps_config_server.config.copy()
     _config["REPO_DIR"] = str(repodir)
     _config["TESTING"] = True
     _config["DEBUG_WAIT"] = debug_wait
@@ -72,7 +71,7 @@ def repodir_s(tmpdir_factory) -> pathlib.Path:
 
 @pytest.fixture(scope="session")
 def server_run_prepare_for_testing(repodir_s):
-    server_run_prepare(_testing_make_server_config(repodir_s))
+    server_config_flask(_testing_make_server_config(repodir_s))
 
 @pytest.fixture(scope="session")
 def rc(repodir) -> ServerRepoCtx:

@@ -6,7 +6,7 @@
 #include <boost/regex.hpp>
 
 #include <cruft.h>
-#include <ps_config.h>
+#include <ps_config_updater.h>
 
 #ifdef _WIN32
 #include <windows.h>
