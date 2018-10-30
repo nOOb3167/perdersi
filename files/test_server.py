@@ -323,7 +323,7 @@ def test_updater(
     shutil.copyfile(customopt_updater_exe, str(updater_exe))
     
     p0 = subprocess.Popen([updater_exe], env=_testing_make_server_config_env(repodir=repodir_updater, debug_wait=customopt_debug_wait))
-    p1 = subprocess.Popen([customopt_python_exe, "server.py"], env=_testing_make_server_config_env(repodir=repodir_s, debug_wait=customopt_debug_wait))
+    p1 = subprocess.Popen([customopt_python_exe, "-m", "startup"], env=_testing_make_server_config_env(repodir=repodir_s, debug_wait=customopt_debug_wait))
     try: p0.communicate(timeout=(None if customopt_debug_wait != "OFF" else 10))
     except: pass
     try: p0.kill()

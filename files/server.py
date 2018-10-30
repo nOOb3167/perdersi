@@ -124,6 +124,3 @@ def server_run_overridable():
         conf = ps_config_server.config.copy()
     server_config_flask(conf)
     server_run()
-
-if __name__ == '__main__':
-    server_run_overridable()

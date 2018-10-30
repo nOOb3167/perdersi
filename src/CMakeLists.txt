@@ -57,26 +57,30 @@ target_compile_definitions(tupdater3 PUBLIC _PS_DEBUG_TUPDATER=3)
 
 find_package(Python3 REQUIRED)
 
+set(PYSRC ${CMAKE_SOURCE_DIR}/../files/)
+
 macro(ps_generate_header _CONFIG_UPDATER_PYTHON_MODULE_NAME _CONFIG_SERVER_PYTHON_MODULE_NAME)
 	add_custom_command(
 		OUTPUT ${CMAKE_BINARY_DIR}/ps_config_updater.h
 		COMMAND ${Python3_EXECUTABLE}
-			${CMAKE_SOURCE_DIR}/../files/genhdr.py
+			-m genhdr
 			--src_mod ${_CONFIG_UPDATER_PYTHON_MODULE_NAME}
 			--dst ${CMAKE_BINARY_DIR}/ps_config_updater.h
+		WORKING_DIRECTORY ${PYSRC}
 		DEPENDS
-			${CMAKE_SOURCE_DIR}/../files/genhdr.py
-			${CMAKE_SOURCE_DIR}/../files/${_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py
+			${PYSRC}genhdr.py
+			${PYSRC}${_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py
 		COMMENT "Generating Header (Updater)"
 	)
 	add_custom_command(
 		OUTPUT ${CMAKE_BINARY_DIR}/ps_config_server.py
 		COMMAND ${CMAKE_COMMAND}
 			-E copy
-			${CMAKE_SOURCE_DIR}/../files/${_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
+			${PYSRC}${_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
 			${CMAKE_BINARY_DIR}/ps_config_server.py
+		WORKING_DIRECTORY ${PYSRC}
 		DEPENDS
-			${CMAKE_SOURCE_DIR}/../files/${_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
+			${PYSRC}${_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
 		COMMENT "Generating Header (Server)"
 	)
 endmacro()
@@ -87,9 +91,10 @@ add_custom_target(TestsRunServer
 		-E env
 			"PYTHONPATH=${CMAKE_BINARY_DIR}"
 		${Python3_EXECUTABLE}
-			${CMAKE_SOURCE_DIR}/../files/server.py
+			-m startup
+	WORKING_DIRECTORY ${PYSRC}
 	DEPENDS
-		${CMAKE_BINARY_DIR}/ps_config_server.py
+		${CMAKE_BINARY_DIR}/${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
 	COMMENT "Running Server"
 )
 
@@ -104,7 +109,7 @@ add_custom_target(Tests
 			--customopt_tupdater2_exe=$<TARGET_FILE:tupdater2>
 			--customopt_tupdater3_exe=$<TARGET_FILE:tupdater3>
 			--customopt_updater_exe=$<TARGET_FILE:test>
-	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/../files
+	WORKING_DIRECTORY ${PYSRC}
 	DEPENDS
 		${CMAKE_BINARY_DIR}/ps_config_server.py
 	COMMENT "Running Tests"
