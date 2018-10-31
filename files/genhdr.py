@@ -25,8 +25,8 @@ def make_hdr(json: str):
 def run():
     # get args
     parser = argparse.ArgumentParser()
-    parser.add_argument('--src_mod', nargs=1, required=lambda x: x if x.endswith(".h") else err())
-    parser.add_argument('--dst', nargs=1, required=True)
+    parser.add_argument('--src_mod', nargs=1, required=True)
+    parser.add_argument('--dst', nargs=1, required=True, type=lambda x: x if x.endswith(".h") else err())
     args = parser.parse_args()
     # import src_mod and attempt to retrieve its config attribute as json
     src_mod: types.ModuleType = importlib.import_module(str(args.src_mod[0]))

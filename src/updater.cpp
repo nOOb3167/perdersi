@@ -507,7 +507,7 @@ int main(int argc, char **argv)
 
 	std::vector<shahex_t> trees = get_trees_writing(&client, repo.get(), head);
 	std::vector<shahex_t> blobs = get_blobs_writing(&client, repo.get(), trees);
-	ns_git::checkout_obj(repo.get(), head, chkoutdir.string());
+	ns_git::checkout_obj(repo.get(), head,	chkoutdir.string());
 
 	do {
 		if (arg_skipselfupdate)
@@ -526,7 +526,7 @@ int main(int argc, char **argv)
 		return EXIT_SUCCESS;
 	} while (false);
 
-	boost::filesystem::path stage2 = boost::filesystem::path(cruft_current_executable_filename()).parent_path() / config.get<std::string>("UPDATER_STAGE2_EXE_RELATIVE");
+	boost::filesystem::path stage2 = chkoutdir / config.get<std::string>("UPDATER_STAGE2_EXE_RELATIVE");
 	cruft_exec_file_lowlevel(stage2.string(), {}, std::chrono::milliseconds(0));
 
 	return EXIT_SUCCESS;

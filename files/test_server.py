@@ -17,6 +17,9 @@ from server import (server_app,
 from typing import Callable, List, Set, Tuple
 from zlib import (decompress as zlib_decompress)
 
+# https://stackoverflow.com/questions/47535676/oserror-winerror-6-the-handle-is-invalid-when-calling-subprocess-from-python/47669218#47669218
+# https://github.com/gitpython-developers/GitPython#leakage-of-system-resources
+
 # FileMode are values of PS_GIT_FILEMODE_???
 FileMode = int
 shahex = str

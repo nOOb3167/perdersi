@@ -8,7 +8,10 @@
 # #set(Boost_USE_STATIC_RUNTIME ON)
 # #set(PS_OPTS ${PS_OPTS} "/MT$<$<CONFIG:Debug>:d>")
 # # libgit2 -DSTATIC_CRT=OFF
-cmake_minimum_required(VERSION 3.0)
+#
+# https://gitlab.kitware.com/cmake/cmake/issues/14089
+#   WORKING_DIRECTORY generator expression support since CMake 3.13
+cmake_minimum_required(VERSION 3.13)
 cmake_policy(SET CMP0074 NEW) # PackageName_ROOT variables
 project(test)
 
@@ -59,7 +62,18 @@ find_package(Python3 REQUIRED)
 
 set(PYSRC ${CMAKE_SOURCE_DIR}/../files/)
 
-macro(ps_generate_header _CONFIG_UPDATER_PYTHON_MODULE_NAME _CONFIG_SERVER_PYTHON_MODULE_NAME)
+macro(ps_generate_header _CONFIG_SERVER_PYTHON_MODULE_NAME _CONFIG_UPDATER_PYTHON_MODULE_NAME)
+	add_custom_command(
+		OUTPUT ${CMAKE_BINARY_DIR}/ps_config_server.py
+		COMMAND ${CMAKE_COMMAND}
+			-E copy
+			${PYSRC}${_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
+			${CMAKE_BINARY_DIR}/ps_config_server.py
+		WORKING_DIRECTORY ${PYSRC}
+		DEPENDS
+			${PYSRC}${_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
+		COMMENT "Generating Header (Server)"
+	)
 	add_custom_command(
 		OUTPUT ${CMAKE_BINARY_DIR}/ps_config_updater.h
 		COMMAND ${Python3_EXECUTABLE}
@@ -72,27 +86,31 @@ macro(ps_generate_header _CONFIG_UPDATER_PYTHON_MODULE_NAME _CONFIG_SERVER_PYTHO
 			${PYSRC}${_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py
 		COMMENT "Generating Header (Updater)"
 	)
-	add_custom_command(
-		OUTPUT ${CMAKE_BINARY_DIR}/ps_config_server.py
-		COMMAND ${CMAKE_COMMAND}
-			-E copy
-			${PYSRC}${_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
-			${CMAKE_BINARY_DIR}/ps_config_server.py
-		WORKING_DIRECTORY ${PYSRC}
-		DEPENDS
-			${PYSRC}${_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
-		COMMENT "Generating Header (Server)"
-	)
 endmacro()
-ps_generate_header(${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME} ${PS_CONFIG_SERVER_PYTHON_MODULE_NAME})
+ps_generate_header(${PS_CONFIG_SERVER_PYTHON_MODULE_NAME} ${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME})
 
-add_custom_target(TestsRunServer
+add_custom_target(TestsServerPreload
 	COMMAND ${CMAKE_COMMAND}
 		-E env
-			"PYTHONPATH=${CMAKE_BINARY_DIR}"
+			"PYTHONPATH=${CMAKE_BINARY_DIR};${PYSRC}"  # FIXME: PYTHONPATH separator is os.pathsep
+		${Python3_EXECUTABLE}
+			-m preload
+			--updater_exe=$<TARGET_FILE:test>
+			--stage2_exe=$<TARGET_FILE:stage2>
+			--repo_dir=$<TARGET_FILE_DIR:test>/repo_s
+	WORKING_DIRECTORY ${PS_FIXME_OUTPUT_DIR}
+	DEPENDS
+		${CMAKE_BINARY_DIR}/${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
+		${CMAKE_BINARY_DIR}/${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py
+)
+
+add_custom_target(TestsServerRun
+	COMMAND ${CMAKE_COMMAND}
+		-E env
+			"PYTHONPATH=${CMAKE_BINARY_DIR};${PYSRC}"  # FIXME: PYTHONPATH separator is os.pathsep
 		${Python3_EXECUTABLE}
 			-m startup
-	WORKING_DIRECTORY ${PYSRC}
+	WORKING_DIRECTORY ${PS_FIXME_OUTPUT_DIR}
 	DEPENDS
 		${CMAKE_BINARY_DIR}/${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
 	COMMENT "Running Server"
