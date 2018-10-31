@@ -503,7 +503,6 @@ int main(int argc, char **argv)
 	std::cout << "repodir: " << git_repository_path(repo.get()) << std::endl;
 	std::cout << "chkodir: " << chkoutdir.string() << std::endl;
 	std::cout << "head: " << head << std::endl;
-	int q[] = {0x00, 0x01, };
 
 	std::vector<shahex_t> trees = get_trees_writing(&client, repo.get(), head);
 	std::vector<shahex_t> blobs = get_blobs_writing(&client, repo.get(), trees);
