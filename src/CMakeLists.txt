@@ -16,12 +16,11 @@ cmake_policy(SET CMP0074 NEW) # PackageName_ROOT variables
 project(test)
 
 option(PS_DEBUG_WAIT "waits for debugger at startup (win32) (ON/OFF)" OFF)
-set(PS_CONFIG_UPDATER_PYTHON_MODULE_NAME config_updater_default CACHE STRING "")
 set(PS_CONFIG_SERVER_PYTHON_MODULE_NAME config_server_default CACHE STRING "")
+set(PS_CONFIG_UPDATER_PYTHON_MODULE_NAME config_updater_default CACHE STRING "")
 
-list(APPEND CMAKE_MODULE_PATH
-	${CMAKE_SOURCE_DIR}/cmake/Modules
-)
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
+
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 set(Boost_USE_STATIC_LIBS ON)
@@ -38,13 +37,13 @@ set(PS_INCS ${PS_INCS} ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DI
 set(PS_LIBS ${PS_LIBS} Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking Threads::Threads ${LIBGIT2_LIBRARIES} ${SHLWAPI_LIBRARIES})
 set(PS_DEFS ${PS_DEFS} _PS_UPDATER_TESTING _CRT_SECURE_NO_WARNINGS)
 
-add_library(common STATIC cruft.h cruft.cpp miniz/miniz.c)
+add_library(common STATIC cruft.h cruft.cpp miniz/miniz.c ps_config_updater.h)
 target_link_libraries(common PUBLIC ${PS_LIBS})
 target_compile_definitions(common PUBLIC ${PS_DEFS})
 target_compile_options(common PUBLIC ${PS_OPTS})
 target_include_directories(common PUBLIC ${PS_INCS})
 
-add_executable(test ${PS_RCS} updater.cpp ps_config_updater.h)
+add_executable(test ${PS_RCS} updater.cpp)
 target_link_libraries(test PUBLIC common)
 
 add_executable(stage2 ${PS_RCS} stage2.cpp)
@@ -61,77 +60,63 @@ target_compile_definitions(tupdater3 PUBLIC _PS_DEBUG_TUPDATER=3)
 find_package(Python3 REQUIRED)
 
 set(PYSRC ${CMAKE_SOURCE_DIR}/../files/)
+set(PYPATH "\"PYTHONPATH=${CMAKE_BINARY_DIR};${PYSRC}\"") # FIXME: PYTHONPATH separator is os.pathsep
 
-macro(ps_generate_header _CONFIG_SERVER_PYTHON_MODULE_NAME _CONFIG_UPDATER_PYTHON_MODULE_NAME)
-	add_custom_command(
-		OUTPUT ${CMAKE_BINARY_DIR}/ps_config_server.py
-		COMMAND ${CMAKE_COMMAND}
-			-E copy
-			${PYSRC}${_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
-			${CMAKE_BINARY_DIR}/ps_config_server.py
-		WORKING_DIRECTORY ${PYSRC}
-		DEPENDS
-			${PYSRC}${_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
-		COMMENT "Generating Header (Server)"
-	)
-	add_custom_command(
-		OUTPUT ${CMAKE_BINARY_DIR}/ps_config_updater.h
-		COMMAND ${Python3_EXECUTABLE}
-			-m genhdr
-			--src_mod ${_CONFIG_UPDATER_PYTHON_MODULE_NAME}
+add_custom_command(
+	COMMENT "Generating Config Module (ps_config_server.py)"
+	OUTPUT ps_config_server.py
+	COMMAND
+		${CMAKE_COMMAND} -E copy
+			${PYSRC}${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
+			ps_config_server.py
+	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+	DEPENDS ${PYSRC}${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
+)
+add_custom_command(
+	COMMENT "Generating Config Header (ps_config_updater.h)"
+	OUTPUT ps_config_updater.h
+	COMMAND
+		${CMAKE_COMMAND} -E env ${PYPATH}
+		${Python3_EXECUTABLE} -m genhdr
+			--src_mod ${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}
 			--dst ${CMAKE_BINARY_DIR}/ps_config_updater.h
-		WORKING_DIRECTORY ${PYSRC}
-		DEPENDS
-			${PYSRC}genhdr.py
-			${PYSRC}${_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py
-		COMMENT "Generating Header (Updater)"
-	)
-endmacro()
-ps_generate_header(${PS_CONFIG_SERVER_PYTHON_MODULE_NAME} ${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME})
+	WORKING_DIRECTORY ${PYSRC}
+	DEPENDS ${PYSRC}${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py ${PYSRC}genhdr.py
+)
 
 add_custom_target(TestsServerPreload
-	COMMAND ${CMAKE_COMMAND}
-		-E env
-			"PYTHONPATH=${CMAKE_BINARY_DIR};${PYSRC}"  # FIXME: PYTHONPATH separator is os.pathsep
-		${Python3_EXECUTABLE}
-			-m preload
+	COMMENT "Creating test repository"
+	COMMAND
+		${CMAKE_COMMAND} -E env ${PYPATH}
+		${Python3_EXECUTABLE} -m preload
 			--updater_exe=$<TARGET_FILE:test>
 			--stage2_exe=$<TARGET_FILE:stage2>
 			--repo_dir=$<TARGET_FILE_DIR:test>/repo_s
 	WORKING_DIRECTORY ${PS_FIXME_OUTPUT_DIR}
-	DEPENDS
-		${CMAKE_BINARY_DIR}/${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
-		${CMAKE_BINARY_DIR}/${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py
+	DEPENDS ps_config_server.py
 )
 
 add_custom_target(TestsServerRun
-	COMMAND ${CMAKE_COMMAND}
-		-E env
-			"PYTHONPATH=${CMAKE_BINARY_DIR};${PYSRC}"  # FIXME: PYTHONPATH separator is os.pathsep
-		${Python3_EXECUTABLE}
-			-m startup
+	COMMAND
+		${CMAKE_COMMAND} -E env ${PYPATH}
+		${Python3_EXECUTABLE} -m startup
 	WORKING_DIRECTORY ${PS_FIXME_OUTPUT_DIR}
-	DEPENDS
-		${CMAKE_BINARY_DIR}/${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
-	COMMENT "Running Server"
+	DEPENDS ps_config_server.py
 )
 
 add_custom_target(Tests
-	COMMAND ${CMAKE_COMMAND}
-		-E env
-			"PYTHONPATH=${CMAKE_BINARY_DIR}"
-		${Python3_EXECUTABLE}
-			-m pytest --cov=. --cov-report term
+	COMMAND
+		${CMAKE_COMMAND} -E env ${PYPATH}
+		${Python3_EXECUTABLE} -m pytest
+			--cov=. --cov-report term
 			--customopt_debug_wait=${PS_DEBUG_WAIT}
 			--customopt_python_exe=${Python3_EXECUTABLE}
 			--customopt_tupdater2_exe=$<TARGET_FILE:tupdater2>
 			--customopt_tupdater3_exe=$<TARGET_FILE:tupdater3>
 			--customopt_updater_exe=$<TARGET_FILE:test>
 	WORKING_DIRECTORY ${PYSRC}
-	DEPENDS
-		${CMAKE_BINARY_DIR}/ps_config_server.py
-	COMMENT "Running Tests"
+	DEPENDS ps_config_server.py ps_config_updater.py
 )
-add_dependencies(Tests test tupdater2 tupdater3)
+add_dependencies(Tests test stage2 tupdater2 tupdater3)
 
 install(TARGETS test RUNTIME DESTINATION bin)
