@@ -60,7 +60,7 @@ target_compile_definitions(tupdater3 PUBLIC _PS_DEBUG_TUPDATER=3)
 find_package(Python3 REQUIRED)
 
 set(PYSRC ${CMAKE_SOURCE_DIR}/../files/)
-set(PYPATH "\"PYTHONPATH=${CMAKE_BINARY_DIR};${PYSRC}\"") # FIXME: PYTHONPATH separator is os.pathsep
+set(PYPATH "PYTHONPATH=${CMAKE_BINARY_DIR};${PYSRC}") # FIXME: PYTHONPATH separator is os.pathsep
 
 add_custom_command(
 	COMMENT "Generating Config Module (ps_config_server.py)"
@@ -76,18 +76,18 @@ add_custom_command(
 	COMMENT "Generating Config Header (ps_config_updater.h)"
 	OUTPUT ps_config_updater.h
 	COMMAND
-		${CMAKE_COMMAND} -E env ${PYPATH}
+		${CMAKE_COMMAND} -E env "${PYPATH}"
 		${Python3_EXECUTABLE} -m genhdr
 			--src_mod ${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}
 			--dst ${CMAKE_BINARY_DIR}/ps_config_updater.h
-	WORKING_DIRECTORY ${PYSRC}
+	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 	DEPENDS ${PYSRC}${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py ${PYSRC}genhdr.py
 )
 
 add_custom_target(TestsServerPreload
 	COMMENT "Creating test repository"
 	COMMAND
-		${CMAKE_COMMAND} -E env ${PYPATH}
+		${CMAKE_COMMAND} -E env "${PYPATH}"
 		${Python3_EXECUTABLE} -m preload
 			--updater_exe=$<TARGET_FILE:test>
 			--stage2_exe=$<TARGET_FILE:stage2>
@@ -98,7 +98,7 @@ add_custom_target(TestsServerPreload
 
 add_custom_target(TestsServerRun
 	COMMAND
-		${CMAKE_COMMAND} -E env ${PYPATH}
+		${CMAKE_COMMAND} -E env "${PYPATH}"
 		${Python3_EXECUTABLE} -m startup
 	WORKING_DIRECTORY ${PS_FIXME_OUTPUT_DIR}
 	DEPENDS ps_config_server.py
@@ -106,7 +106,7 @@ add_custom_target(TestsServerRun
 
 add_custom_target(Tests
 	COMMAND
-		${CMAKE_COMMAND} -E env ${PYPATH}
+		${CMAKE_COMMAND} -E env "${PYPATH}"
 		${Python3_EXECUTABLE} -m pytest
 			--cov=. --cov-report term
 			--customopt_debug_wait=${PS_DEBUG_WAIT}
