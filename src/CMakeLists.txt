@@ -29,6 +29,13 @@ find_package(LibGit2 REQUIRED)
 set(SFML_STATIC_LIBRARIES ON)
 find_package(SFML CONFIG COMPONENTS graphics system window REQUIRED)
 
+# https://cmake.org/cmake/help/latest/prop_tgt/RUNTIME_OUTPUT_DIRECTORY.html#prop_tgt:RUNTIME_OUTPUT_DIRECTORY
+#   RUNTIME_OUTPUT_DIRECTORY "" or "." means CMAKE_BINARY_DIR
+#   VS etc helpfully "... append a per-configuration subdirectory to the specified directory unless a generator expression is used"
+#     thus landing the binaries into eg CMAKE_BINARY_DIR/Debug
+#   use a no-op generator expression to really land binaries into CMAKE_BINARY_DIR
+set(PS_RUNTIME_OUTPUT_DIRECTORY "$<0:>")
+
 if (WIN32)
 	set(PS_RCS ${PS_RCS} updater.rc)
 	set(PS_LIBS ${PS_LIBS} winhttp Rpcrt4 crypt32)
@@ -45,6 +52,7 @@ target_include_directories(common PUBLIC ${PS_INCS})
 
 add_executable(test ${PS_RCS} updater.cpp)
 target_link_libraries(test PUBLIC common)
+set_target_properties(test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PS_RUNTIME_OUTPUT_DIRECTORY})
 
 add_executable(stage2 ${PS_RCS} stage2.cpp)
 target_link_libraries(stage2 PUBLIC common sfml-graphics sfml-system sfml-window)
@@ -92,7 +100,7 @@ add_custom_target(TestsServerPreload
 			--updater_exe=$<TARGET_FILE:test>
 			--stage2_exe=$<TARGET_FILE:stage2>
 			--repo_dir=$<TARGET_FILE_DIR:test>/repo_s
-	WORKING_DIRECTORY ${PS_FIXME_OUTPUT_DIR}
+	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 	DEPENDS ps_config_server.py
 )
 
@@ -100,7 +108,7 @@ add_custom_target(TestsServerRun
 	COMMAND
 		${CMAKE_COMMAND} -E env "${PYPATH}"
 		${Python3_EXECUTABLE} -m startup
-	WORKING_DIRECTORY ${PS_FIXME_OUTPUT_DIR}
+	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 	DEPENDS ps_config_server.py
 )
 
