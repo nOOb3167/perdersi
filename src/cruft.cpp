@@ -1,3 +1,4 @@
+#include "cruft.h"
 #include <cassert>
 #include <sstream>
 #include <stdexcept>
@@ -31,18 +32,17 @@ cruft_current_executable_filename()
 //    Interdrive move attempt causes copy which is unable to displace a/the running executable.
 void
 cruft_rename_file_file(
-	std::string src_filename,
-	std::string dst_filename)
+	const std::string &src_filename,
+	const std::string &dst_filename)
 {
-	BOOL ok = MoveFileEx(src_filename.c_str(), dst_filename.c_str(), MOVEFILE_COPY_ALLOWED | MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
-	if (!ok)
+	if (!MoveFileEx(src_filename.c_str(), dst_filename.c_str(), MOVEFILE_COPY_ALLOWED | MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
 		throw std::runtime_error("rename");
 }
 
 void
 cruft_rename_file_selfexec(
-	std::string src_filename,
-	std::string dst_filename)
+	const std::string &src_filename,
+	const std::string &dst_filename)
 {
 	if (!boost::regex_search(src_filename.c_str(), boost::cmatch(), boost::regex(".exe$")) || !boost::regex_search(dst_filename.c_str(), boost::cmatch(), boost::regex(".exe$")))
 		std::runtime_error("reexec name match");
@@ -83,7 +83,7 @@ cruft_exec_file_lowlevel(
 }
 
 void
-cruft_exec_file_expecting(std::string exec_filename, int ret_expected)
+cruft_exec_file_expecting(const std::string &exec_filename, int ret_expected)
 {
 	if (cruft_exec_file_lowlevel(exec_filename, {}, std::chrono::milliseconds(0xFFFFFFFF)) != ret_expected)
 		throw std::runtime_error("process exec code check");
@@ -91,8 +91,8 @@ cruft_exec_file_expecting(std::string exec_filename, int ret_expected)
 
 void
 cruft_exec_file_expecting_ex(
-	std::string exec_filename,
-	std::string arg_opt,
+	const std::string &exec_filename,
+	const std::string &arg_opt,
 	std::chrono::milliseconds wait_ms,
 	int ret_expected)
 {
