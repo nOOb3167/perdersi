@@ -81,6 +81,16 @@ add_custom_command(
 	DEPENDS ${PYSRC}${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
 )
 add_custom_command(
+	COMMENT "Generating Config Module (ps_config_updater.py)"
+	OUTPUT ps_config_updater.py
+	COMMAND
+		${CMAKE_COMMAND} -E copy
+			${PYSRC}${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py
+			ps_config_updater.py
+	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+	DEPENDS ${PYSRC}${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py
+)
+add_custom_command(
 	COMMENT "Generating Config Header (ps_config_updater.h)"
 	OUTPUT ps_config_updater.h
 	COMMAND
@@ -115,7 +125,7 @@ add_custom_target(TestsServerRun
 add_custom_target(Tests
 	COMMAND
 		${CMAKE_COMMAND} -E env "${PYPATH}"
-		${Python3_EXECUTABLE} -m pytest
+		${Python3_EXECUTABLE} -m pytest ${PYSRC}
 			--cov=. --cov-report term
 			--customopt_debug_wait=${PS_DEBUG_WAIT}
 			--customopt_python_exe=${Python3_EXECUTABLE}

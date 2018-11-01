@@ -34,30 +34,17 @@ class RetCodeErr(Exception):
 class RetCode500(RetCodeErr):
     pass
 
-def _testing_make_server_config(
-    repodir: pathlib.Path,
-    debug_wait: str = "OFF"
+def _testing_make_config(
+    mod: str,
+    extra: dict = {}
 ):
-    import ps_config_server
-    _config = ps_config_server.config.copy()
-    _config["REPO_DIR"] = str(repodir)
+    import importlib, json, os
+    env = os.environ.copy()
+    _config = importlib.import_module("ps_config_" + mod).config.copy()
     _config["TESTING"] = True
-    _config["DEBUG_WAIT"] = debug_wait
-    return _config
-
-def _testing_make_server_config_env(
-    repodir: pathlib.Path,
-    debug_wait: str = "OFF"
-):
-    import json, os
-    env = os.environ.copy()
-    env["PS_CONFIG"] = json.dumps(_testing_make_server_config(repodir, debug_wait))
-    return env
-
-def _testing_make_server_config_env_(_dict: dict):
-    import json, os
-    env = os.environ.copy()
-    env["PS_CONFIG"] = json.dumps(_dict)
+    for k in extra:
+        _config[k] = extra[k]
+    env["PS_CONFIG"] = json.dumps(_config)
     return env
 
 @pytest.fixture(scope="session")
@@ -74,11 +61,17 @@ def repodir_s(tmpdir_factory) -> pathlib.Path:
 
 @pytest.fixture(scope="session")
 def server_run_prepare_for_testing(repodir_s):
-    server_config_flask(_testing_make_server_config(repodir_s))
+    import json
+    env = _testing_make_config(
+        mod="server",
+        extra={
+            "REPO_DIR": str(repodir_s),
+        })
+    _config = json.loads(env['PS_CONFIG'])
+    server_config_flask(_config)
 
 @pytest.fixture(scope="session")
-def rc(repodir) -> ServerRepoCtx:
-    repodir = repodir
+def rc(repodir: pathlib.Path) -> ServerRepoCtx:
     repo = git.Repo.init(repodir)
     yield ServerRepoCtx(repodir, repo)
 
@@ -306,7 +299,12 @@ def test_updater_reexec(
     temp3_exe: pathlib.Path = tmpdir.joinpath("tupdater3.exe")
     shutil.copyfile(customopt_tupdater2_exe, str(temp2_exe))
     shutil.copyfile(customopt_tupdater3_exe, str(temp3_exe))
-    p0 = subprocess.Popen([str(temp2_exe)], env=_testing_make_server_config_env_(_dict={ "TUPDATER3_EXE": str(temp3_exe), "DEBUG_WAIT": customopt_debug_wait }))
+    p0 = subprocess.Popen([str(temp2_exe)], env=_testing_make_config(
+        mod="updater",
+        extra={
+            "DEBUG_WAIT": customopt_debug_wait,
+            "TUPDATER3_EXE": str(temp3_exe),
+        }))
     p0.wait()
     if p0.returncode != 0:
         raise RetCodeErr()
@@ -325,8 +323,19 @@ def test_updater(
     updater_exe: str = str(pathlib_Path(tmpdir_factory.mktemp("updater")).joinpath("updater.exe"))
     shutil.copyfile(customopt_updater_exe, str(updater_exe))
     
-    p0 = subprocess.Popen([updater_exe], env=_testing_make_server_config_env(repodir=repodir_updater, debug_wait=customopt_debug_wait))
-    p1 = subprocess.Popen([customopt_python_exe, "-m", "startup"], env=_testing_make_server_config_env(repodir=repodir_s, debug_wait=customopt_debug_wait))
+    p0 = subprocess.Popen([updater_exe], env=_testing_make_config(
+        mod="updater",
+        extra={
+            "DEBUG_WAIT": customopt_debug_wait,
+            "REPO_DIR": str(repodir_updater),
+            "REPO_CHK_DIR": str(repodir_updater.parent.joinpath("repo_chk")),
+        }))
+    p1 = subprocess.Popen([customopt_python_exe, "-m", "startup"], env=_testing_make_config(
+        mod="server",
+        extra={
+            "DEBUG_WAIT": customopt_debug_wait,
+            "REPO_DIR": str(repodir_s),
+        }))
     try: p0.communicate(timeout=(None if customopt_debug_wait != "OFF" else 10))
     except: pass
     try: p0.kill()

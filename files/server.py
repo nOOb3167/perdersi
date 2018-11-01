@@ -95,6 +95,11 @@ def qqq():
     hello world qqq
     '''
 
+@server_app.route("/kill", methods=["GET"])
+def kill():
+    flask_request.environ.get('werkzeug.server.shutdown')()
+    return f'''shutting down'''
+
 @server_app.route("/", methods=["GET"])
 def index():
         if SERVER_SESSION_KEY not in flask_session:
@@ -107,8 +112,8 @@ def server_config_flask(_config: confdict):
     global server_app
     server_app.secret_key = base64.b32encode(os_urandom(24)).decode("UTF-8")
     server_app.config['PS'] = _config
-    server_app.config["SERVER_NAME"] = _config['ORIGIN_DOMAIN_APP'] + ':' + _config['LISTEN_PORT']
-    server_app.config['TESTING'] = "TESTING" in _config and _config['TESTING']
+    server_app.config['SERVER_NAME'] = _config['ORIGIN_DOMAIN_APP'] + ':' + _config['LISTEN_PORT']
+    server_app.config['TESTING'] = _config['TESTING']
 
 def server_run():
     global server_app
