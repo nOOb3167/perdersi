@@ -130,5 +130,5 @@ cruft_config_get_path(
 	if (path.is_absolute())
 		return path;
 	else
-		return cruft_current_executable_filename() / path;
+		return boost::filesystem::path(cruft_current_executable_filename()).parent_path() / path;
 }
