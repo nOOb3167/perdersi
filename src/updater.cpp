@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <cstdlib>
 #include <fstream>
@@ -480,20 +481,48 @@ void create_ref(git_repository *repo, const std::string &refname, const git_oid 
 	git_reference_free(ref);
 }
 
+boost::filesystem::path
+prepare_content_file_for_replacing_running_exe(
+	const std::string &content,
+	const std::string &curexefname)
+{
+	// create file with content
+	boost::filesystem::path tryout_exe_path = boost::filesystem::path(curexefname).replace_extension(".tryout.exe");
+	file_write_moving("", tryout_exe_path, content);
+	// see if it runs
+	cruft_exec_file_checking_retcode(tryout_exe_path.string(), "--tryout", std::chrono::milliseconds(5000), 123);
+	return tryout_exe_path;
+}
+
+bool
+ensuring_content_replace_running_exe(
+	const std::string &content,
+	const std::string &curexefname
+)
+{
+	// content already as wanted
+	if (file_read(curexefname) == content)
+		return false;
+	// attempt ensuring content
+	boost::filesystem::path tryout_exe_path = prepare_content_file_for_replacing_running_exe(content, curexefname);
+	cruft_rename_file_over_running_exe(tryout_exe_path.string(), curexefname);
+	// was attempt successful?
+	if (file_read(curexefname) != content)
+		throw std::runtime_error("failed updating");
+	return true;
+}
+
 int main(int argc, char **argv)
 {
-	bool arg_skipselfupdate = false;
-	for (size_t i = 1; i < argc; ++i)
-		if (std::string(argv[i]) == "--tryout")
-			return 123;
-	for (size_t i = 1; i < argc; ++i)
-		if (std::string(argv[i]) == "--skipselfupdate")
-			arg_skipselfupdate = true;
+	if (std::find(argv + 1, argv + argc, "--tryout") != argv + argc)
+		return 123;
+	bool arg_skipselfupdate = std::find(argv + 1, argv + argc, "--skipselfupdate") != argv + argc;
 
 	git_libgit2_init();
 
 	pt_t config = cruft_config_read();
-	boost::filesystem::path chkoutdir = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("chk_%%%%-%%%%-%%%%-%%%%");
+	boost::filesystem::path chkoutdir = cruft_config_get_path(config, "REPO_CHK_DIR");
+	boost::filesystem::path stage2path = chkoutdir / config.get<std::string>("UPDATER_STAGE2_EXE_RELATIVE");
 
 	unique_ptr_gitrepository repo(ns_git::repository_ensure(config.get<std::string>("REPO_DIR")));
 
@@ -502,6 +531,7 @@ int main(int argc, char **argv)
 
 	std::cout << "repodir: " << git_repository_path(repo.get()) << std::endl;
 	std::cout << "chkodir: " << chkoutdir.string() << std::endl;
+	std::cout << "stage2p: " << stage2path.string() << std::endl;
 	std::cout << "head: " << head << std::endl;
 
 	std::vector<shahex_t> trees = get_trees_writing(&client, repo.get(), head);
@@ -511,22 +541,15 @@ int main(int argc, char **argv)
 	do {
 		if (arg_skipselfupdate)
 			break;
-		std::string updater_content(blob_tree_entry_content(repo.get(), head, "updater.exe"));
-		if (file_read(cruft_current_executable_filename()) == updater_content)
+		if (!ensuring_content_replace_running_exe(blob_tree_entry_content(repo.get(), head, "updater.exe"), cruft_current_executable_filename()))
 			break;
-		boost::filesystem::path tryout_exe_path = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path("pstmp_%%%%-%%%%-%%%%-%%%%.exe");
-		file_write_moving("", tryout_exe_path, updater_content);
-		cruft_exec_file_expecting_ex(tryout_exe_path.string(), "--tryout", std::chrono::milliseconds(5000), 123);
-		cruft_rename_file_selfexec(tryout_exe_path.string(), cruft_current_executable_filename());
-		if (file_read(cruft_current_executable_filename()) != updater_content)
-			throw std::runtime_error("failed updating");
+
 		cruft_exec_file_lowlevel(cruft_current_executable_filename(), { "--skipselfupdate" }, std::chrono::milliseconds(0));
 
 		return EXIT_SUCCESS;
 	} while (false);
 
-	boost::filesystem::path stage2 = chkoutdir / config.get<std::string>("UPDATER_STAGE2_EXE_RELATIVE");
-	cruft_exec_file_lowlevel(stage2.string(), {}, std::chrono::milliseconds(0));
+	cruft_exec_file_lowlevel(stage2path.string(), {}, std::chrono::milliseconds(0));
 
 	return EXIT_SUCCESS;
 }
