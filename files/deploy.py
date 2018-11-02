@@ -40,7 +40,8 @@ def deploy():
     
     try:
         p0: subprocess.CompletedProcess = subprocess_run(xcmd, shell=True, capture_output=True)
-        print(p0)
+        if p0.returncode != 0:
+            raise RuntimeError()
     except:
         print(f'failure running: {cmd}', file=sys_stderr)
         raise
