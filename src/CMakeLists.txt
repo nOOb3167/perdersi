@@ -9,6 +9,7 @@
 # #set(PS_OPTS ${PS_OPTS} "/MT$<$<CONFIG:Debug>:d>")
 # # libgit2 -DSTATIC_CRT=OFF
 #
+# https://stackoverflow.com/questions/9998679/is-it-possible-to-add-post-install-commands-to-top-level-makefile-generated-by-c/29979349#29979349
 # https://gitlab.kitware.com/cmake/cmake/issues/14089
 #   WORKING_DIRECTORY generator expression support since CMake 3.13
 cmake_minimum_required(VERSION 3.13)
@@ -18,6 +19,7 @@ project(test)
 option(PS_DEBUG_WAIT "waits for debugger at startup (win32) (ON/OFF)" OFF)
 set(PS_CONFIG_SERVER_PYTHON_MODULE_NAME config_server_default CACHE STRING "")
 set(PS_CONFIG_UPDATER_PYTHON_MODULE_NAME config_updater_default CACHE STRING "")
+set(PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME config_server_default CACHE STRING "")
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
 
@@ -50,9 +52,9 @@ target_compile_definitions(common PUBLIC ${PS_DEFS})
 target_compile_options(common PUBLIC ${PS_OPTS})
 target_include_directories(common PUBLIC ${PS_INCS})
 
-add_executable(test ${PS_RCS} updater.cpp)
-target_link_libraries(test PUBLIC common)
-set_target_properties(test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PS_RUNTIME_OUTPUT_DIRECTORY})
+add_executable(updater ${PS_RCS} updater.cpp)
+target_link_libraries(updater PUBLIC common)
+set_target_properties(updater PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PS_RUNTIME_OUTPUT_DIRECTORY})
 
 add_executable(stage2 ${PS_RCS} stage2.cpp)
 target_link_libraries(stage2 PUBLIC common sfml-graphics sfml-system sfml-window)
@@ -81,6 +83,16 @@ add_custom_command(
 	DEPENDS ${PYSRC}${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
 )
 add_custom_command(
+	COMMENT "Generating Config Module (ps_config_deploy.py)"
+	OUTPUT ps_config_deploy.py
+	COMMAND
+		${CMAKE_COMMAND} -E copy
+			${PYSRC}${PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME}.py
+			ps_config_deploy.py
+	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+	DEPENDS ${PYSRC}${PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME}.py
+)
+add_custom_command(
 	COMMENT "Generating Config Module (ps_config_updater.py)"
 	OUTPUT ps_config_updater.py
 	COMMAND
@@ -107,9 +119,9 @@ add_custom_target(TestsServerPreload
 	COMMAND
 		${CMAKE_COMMAND} -E env "${PYPATH}"
 		${Python3_EXECUTABLE} -m preload
-			--updater_exe=$<TARGET_FILE:test>
+			--updater_exe=$<TARGET_FILE:updater>
 			--stage2_exe=$<TARGET_FILE:stage2>
-			--repo_dir=$<TARGET_FILE_DIR:test>/repo_s
+			--repo_dir=$<TARGET_FILE_DIR:updater>/repo_s
 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 	DEPENDS ps_config_server.py
 )
@@ -131,10 +143,18 @@ add_custom_target(Tests
 			--customopt_python_exe=${Python3_EXECUTABLE}
 			--customopt_tupdater2_exe=$<TARGET_FILE:tupdater2>
 			--customopt_tupdater3_exe=$<TARGET_FILE:tupdater3>
-			--customopt_updater_exe=$<TARGET_FILE:test>
+			--customopt_updater_exe=$<TARGET_FILE:updater>
 	WORKING_DIRECTORY ${PYSRC}
 	DEPENDS ps_config_server.py ps_config_updater.py
 )
-add_dependencies(Tests test stage2 tupdater2 tupdater3)
+add_dependencies(Tests updater stage2 tupdater2 tupdater3)
 
-install(TARGETS test RUNTIME DESTINATION bin)
+add_custom_target(TestsDeploy
+	COMMAND
+		${CMAKE_COMMAND} -E env "${PYPATH}"
+		${Python3_EXECUTABLE} -m deploy
+	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+	DEPENDS ps_config_deploy.py
+)
+
+install(TARGETS updater stage2 RUNTIME DESTINATION ".")
