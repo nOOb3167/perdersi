@@ -82,16 +82,7 @@ add_custom_command(
 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 	DEPENDS ${PYSRC}${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
 )
-add_custom_command(
-	COMMENT "Generating Config Module (ps_config_deploy.py)"
-	OUTPUT ps_config_deploy.py
-	COMMAND
-		${CMAKE_COMMAND} -E copy
-			${PYSRC}${PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME}.py
-			ps_config_deploy.py
-	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-	DEPENDS ${PYSRC}${PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME}.py
-)
+configure_file("${PYSRC}${PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME}.py" ps_config_deploy.py @ONLY)
 add_custom_command(
 	COMMENT "Generating Config Module (ps_config_updater.py)"
 	OUTPUT ps_config_updater.py
