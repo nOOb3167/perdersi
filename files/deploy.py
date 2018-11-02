@@ -9,45 +9,40 @@ from shlex import (split as shlex_split)
 import subprocess
 from subprocess import (run as subprocess_run)
 from sys import (stderr as sys_stderr)
+import typing
 
-def err():
-    raise RuntimeError();
+def sub_cygpath(path: str):
+    # FIXME: this is a windows / cygwin workaround
+    #   subs 'X:/path' into '/cygdrive/x/path'
+    def drivelower(m: re.Match):
+        return '/cygdrive/' + m[1].lower() + '/' + m[2]
+    return re_sub(r'^([a-zA-Z]):[/\\](.*)', drivelower, path)
 
-def _file_open_mkdirp(path: str):
-    os_makedirs(os_path_dirname(path), exist_ok=True)
-    return open(path, 'wb')
-
-def deploy():
+def run():
     from ps_config_deploy import config
+    
+    # RSYNC_CMD: "rsync -x -y zzz"
+    #   split into "rsync" "-x" "-y" "zzz"
+    # RSYNC_DST_UHP: ["user", "host", "port"]
+    #   user@host:port
+    #   vanishing atsign on empty user: user@XXX XXX
+    #   remaining colon on empty port:  XXX:port XXX:
+    # RSYNC_DST: "/path/"
+    # RSYNC_SRC: "c:\\path"
+    #   windows paths get cygwin-ed
+    
+    cmd: typing.List[str] = shlex_split(config['RSYNC_CMD'])
     
     user = config['RSYNC_DST_UHP'][0]
     host = config['RSYNC_DST_UHP'][1]
     port = config['RSYNC_DST_UHP'][2]
     
-    cmd = shlex_split(config['RSYNC_CMD'])
+    src = sub_cygpath(config['RSYNC_SRC'])
+    dst = (user + ('@' if user else '') + host + ':' + port) + config['RSYNC_DST']
     
-    # FIXME: this is a windows / cygwin workaround
-    #   needs to sub 'X:/path' into '/cygdrive/x/path'
-    def drivelower(m: re.Match):
-        return '/cygdrive/' + m[1].lower() + '/' + m[2]
-    config['RSYNC_SRC'] = re_sub(r'^([a-zA-Z]):[/\\](.*)', drivelower, config['RSYNC_SRC'])
-    
-    uhp = user + ('@' if user else '') + host + ':' + port
-    dst = uhp + config['RSYNC_DST']
-    
-    xcmd = cmd
-    xcmd += ['-rav', config['RSYNC_SRC'], dst]
-    
-    try:
-        p0: subprocess.CompletedProcess = subprocess_run(xcmd, shell=True, capture_output=True)
-        if p0.returncode != 0:
-            raise RuntimeError()
-    except:
-        print(f'failure running: {cmd}', file=sys_stderr)
-        raise
-
-def run():
-    deploy()
+    p0: subprocess.CompletedProcess = subprocess_run(cmd + ['-rav', src, dst], shell=True, capture_output=True)
+    if p0.returncode != 0:
+        raise RuntimeError()
 
 if __name__ == '__main__':
     run()
