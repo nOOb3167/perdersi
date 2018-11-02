@@ -6,6 +6,7 @@
 /files/__pycache__
 /files/config_*.py
 !/files/config_updater_default.py
+!/files/config_server_default.py
 /ansible/sepol/pspol.pp
 /ansible/sepol/reload.stamp
 /ansible/sepol/tmp
