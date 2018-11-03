@@ -1,5 +1,5 @@
 # BOOST_ROOT
-# LIBGIT2_INCLUDE_DIR LIBGIT2_LIBRARIES
+# LibGit2_ROOT or LIBGIT2_INCLUDE_DIR LIBGIT2_LIBRARY
 # Python3_ROOT_DIR
 # SFML_ROOT (lib/cmake/SFML)
 # #
@@ -38,13 +38,11 @@ find_package(SFML CONFIG COMPONENTS graphics system window REQUIRED)
 #   use a no-op generator expression to really land binaries into CMAKE_BINARY_DIR
 set(PS_RUNTIME_OUTPUT_DIRECTORY "$<0:>")
 
-if (WIN32)
-	set(PS_RCS ${PS_RCS} updater.rc)
-	set(PS_LIBS ${PS_LIBS} winhttp Rpcrt4 crypt32)
-endif ()
-set(PS_INCS ${PS_INCS} ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/miniz ${LIBGIT2_INCLUDE_DIR})
-set(PS_LIBS ${PS_LIBS} Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking Threads::Threads ${LIBGIT2_LIBRARIES} ${SHLWAPI_LIBRARIES})
-set(PS_DEFS ${PS_DEFS} _PS_UPDATER_TESTING _CRT_SECURE_NO_WARNINGS)
+set(PS_RCS ${PS_RCS} $<$<STREQUAL:$<CXX_COMPILER_ID>,MSVC>:updater.rc>)
+set(PS_LIBS ${PS_LIBS} $<$<STREQUAL:$<CXX_COMPILER_ID>,MSVC>:winhttp Rpcrt4 crypt32>)
+set(PS_INCS ${PS_INCS} ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/miniz)
+set(PS_LIBS ${PS_LIBS} Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking Threads::Threads LibGit2::LibGit2)
+set(PS_DEFS ${PS_DEFS} _CRT_SECURE_NO_WARNINGS)
 
 add_library(common STATIC cruft.h cruft.cpp miniz/miniz.c ps_config_updater.h)
 target_link_libraries(common PUBLIC ${PS_LIBS})
