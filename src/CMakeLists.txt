@@ -31,28 +31,24 @@ find_package(LibGit2 REQUIRED)
 set(SFML_STATIC_LIBRARIES ON)
 find_package(SFML CONFIG COMPONENTS graphics system window REQUIRED)
 
+set(PS_RCS $<$<STREQUAL:$<CXX_COMPILER_ID>,MSVC>:updater.rc>)
+
+add_library(common STATIC cruft.h cruft.cpp miniz/miniz.c ps_config_updater.h)
+target_link_libraries(common PUBLIC
+	Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking
+	Threads::Threads LibGit2::LibGit2 $<$<STREQUAL:$<CXX_COMPILER_ID>,MSVC>:winhttp Rpcrt4 crypt32>
+)
+target_compile_definitions(common PUBLIC _CRT_SECURE_NO_WARNINGS)
+target_include_directories(common PUBLIC ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/miniz)
+
+add_executable(updater ${PS_RCS} updater.cpp)
+target_link_libraries(updater PUBLIC common)
+set_target_properties(updater PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<0:>")
 # https://cmake.org/cmake/help/latest/prop_tgt/RUNTIME_OUTPUT_DIRECTORY.html#prop_tgt:RUNTIME_OUTPUT_DIRECTORY
 #   RUNTIME_OUTPUT_DIRECTORY "" or "." means CMAKE_BINARY_DIR
 #   VS etc helpfully "... append a per-configuration subdirectory to the specified directory unless a generator expression is used"
 #     thus landing the binaries into eg CMAKE_BINARY_DIR/Debug
 #   use a no-op generator expression to really land binaries into CMAKE_BINARY_DIR
-set(PS_RUNTIME_OUTPUT_DIRECTORY "$<0:>")
-
-set(PS_RCS ${PS_RCS} $<$<STREQUAL:$<CXX_COMPILER_ID>,MSVC>:updater.rc>)
-set(PS_LIBS ${PS_LIBS} $<$<STREQUAL:$<CXX_COMPILER_ID>,MSVC>:winhttp Rpcrt4 crypt32>)
-set(PS_INCS ${PS_INCS} ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/miniz)
-set(PS_LIBS ${PS_LIBS} Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking Threads::Threads LibGit2::LibGit2)
-set(PS_DEFS ${PS_DEFS} _CRT_SECURE_NO_WARNINGS)
-
-add_library(common STATIC cruft.h cruft.cpp miniz/miniz.c ps_config_updater.h)
-target_link_libraries(common PUBLIC ${PS_LIBS})
-target_compile_definitions(common PUBLIC ${PS_DEFS})
-target_compile_options(common PUBLIC ${PS_OPTS})
-target_include_directories(common PUBLIC ${PS_INCS})
-
-add_executable(updater ${PS_RCS} updater.cpp)
-target_link_libraries(updater PUBLIC common)
-set_target_properties(updater PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PS_RUNTIME_OUTPUT_DIRECTORY})
 
 add_executable(stage2 ${PS_RCS} stage2.cpp)
 target_link_libraries(stage2 PUBLIC common sfml-graphics sfml-system sfml-window)
@@ -67,8 +63,13 @@ target_compile_definitions(tupdater3 PUBLIC _PS_DEBUG_TUPDATER=3)
 
 find_package(Python3 REQUIRED)
 
+if(WIN32)
+	set(SEP "\\;")
+else()
+	set(SEP ":")
+endif()
 set(PYSRC ${CMAKE_SOURCE_DIR}/../files/)
-set(PYPATH "PYTHONPATH=${CMAKE_BINARY_DIR};${PYSRC}") # FIXME: PYTHONPATH separator is os.pathsep
+set(PYPATH "PYTHONPATH=${CMAKE_BINARY_DIR}${SEP}${PYSRC}")
 
 add_custom_command(
 	COMMENT "Generating Config Module (ps_config_server.py)"
