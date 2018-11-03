@@ -38,6 +38,16 @@ class RetCodeErr(Exception):
 class RetCode500(RetCodeErr):
     pass
 
+class Dirs:
+    def __init__(self, tmpbase: str):
+        b: pathlib.Path = pathlib.Path(tmpbase)
+        for k in [
+            'repodir', 'repodir_s',
+            'repodir_updater', 'repodir_updater_chk',
+            'reexecdir', 'updaterdir']:
+            setattr(self, k, b / k)
+            os_makedirs(getattr(self, k))
+
 def _testing_make_config(
     mod: str,
     extra: dict = {}
@@ -53,41 +63,23 @@ def _testing_make_config(
     return env
 
 @pytest.fixture(scope="session")
-def repodir(tmpdir_factory) -> pathlib.Path:
-    return pathlib_Path(tmpdir_factory.mktemp("repo"))
+def dirs(tmpdir_factory) -> Dirs:
+    yield Dirs(tmpdir_factory.mktemp('dirs'))
 
 @pytest.fixture(scope="session")
-def repodir_updater(tmpdir_factory) -> pathlib.Path:
-    return pathlib_Path(tmpdir_factory.mktemp("repo_updater"))
-
-@pytest.fixture(scope="session")
-def repodir_s(tmpdir_factory) -> pathlib.Path:
-    return pathlib_Path(tmpdir_factory.mktemp("repo_s"))
-
-@pytest.fixture(scope="session")
-def server_run_prepare_for_testing(repodir_s):
-    env = _testing_make_config(
-        mod="server",
-        extra={
-            "REPO_DIR": str(repodir_s),
-        })
-    _config = json_loads(env['PS_CONFIG'])
-    server_config_flask(_config)
-
-@pytest.fixture(scope="session")
-def rc(repodir: pathlib.Path) -> ServerRepoCtx:
-    repo = git.Repo.init(repodir)
-    yield ServerRepoCtx(repodir, repo)
+def rc(dirs: Dirs) -> ServerRepoCtx:
+    repo = git.Repo.init(str(dirs.repodir))
+    yield ServerRepoCtx(dirs.repodir, repo)
 
 @pytest.fixture(scope="session")
 def rc_s(
     customopt_tupdater2_exe: str,
     customopt_tupdater3_exe: str,
-    repodir_s: pathlib.Path
+    dirs: Dirs
 ) -> ServerRepoCtx:
     import shutil
-    repo = git.Repo.init(str(repodir_s))
-    rc = ServerRepoCtx(repodir_s, repo)
+    repo = git.Repo.init(str(dirs.repodir_s))
+    rc = ServerRepoCtx(dirs.repodir_s, repo)
     # BEG populate with dummy data
     for ff in [("a.txt", b"aaa"), ("d/b.txt", b"bbb")]:
         with _file_open_mkdirp(str(rc.repodir.joinpath(ff[0]))) as f:
@@ -208,14 +200,17 @@ def _loosedb_raw_object_write(loosedb, presumedhex: shahex, objloose: bytes):
     #loosedb.update_cache(force=True)
     assert loosedb.has_object(_hex2bin(presumedhex))
 
-def test_monkeypatch_must_be_first(server_run_prepare_for_testing):
-    pass
-
-def test_fixtures_ensure(
+def test_prepare(
     rc_s: ServerRepoCtx,
     rc: ServerRepoCtx
 ):
-    pass
+    env = _testing_make_config(
+        mod="server",
+        extra={
+            "REPO_DIR": str(rc_s.repodir),
+        })
+    _config = json_loads(env['PS_CONFIG'])
+    server_config_flask(_config)
 
 def test_sub_post(
     client: flask.testing.FlaskClient
@@ -288,19 +283,18 @@ def test_checkout_head(
     # FIXME: use force=True ?
     #index: git.IndexFile = git.IndexFile.from_tree(rc.repo, master.commit.tree)
     #index.checkout()
-    assert os_path_exists(str(rc.repodir.joinpath(".git")))
+    assert os_path_exists(str(rc.repodir / '.git'))
     rc.repo.head.reset(master.commit, index=True, working_tree=True)
 
 def test_updater_reexec(
-    tmpdir_factory,
     customopt_debug_wait: str,
     customopt_tupdater2_exe: str,
-    customopt_tupdater3_exe: str
+    customopt_tupdater3_exe: str,
+    dirs: Dirs
 ):
     import shutil, subprocess
-    tmpdir: pathlib.Path = pathlib_Path(tmpdir_factory.mktemp("reexec"))
-    temp2_exe: pathlib.Path = tmpdir.joinpath("tupdater2.exe")
-    temp3_exe: pathlib.Path = tmpdir.joinpath("tupdater3.exe")
+    temp2_exe: pathlib.Path = dirs.reexecdir / 'tupdater2.exe'
+    temp3_exe: pathlib.Path = dirs.reexecdir / 'tupdater3.exe'
     shutil.copyfile(customopt_tupdater2_exe, str(temp2_exe))
     shutil.copyfile(customopt_tupdater3_exe, str(temp3_exe))
     p0 = subprocess.Popen([str(temp2_exe)], env=_testing_make_config(
@@ -314,31 +308,29 @@ def test_updater_reexec(
         raise RetCodeErr()
 
 def test_updater(
-    tmpdir_factory,
     customopt_debug_wait: str,
     customopt_python_exe: str,
     customopt_updater_exe: str,
-    repodir_updater: pathlib.Path,
-    repodir_s: pathlib.Path,
+    dirs: Dirs,
     client: flask.testing.FlaskClient
 ):
     import shutil, subprocess
     
-    updater_exe: str = str(pathlib_Path(tmpdir_factory.mktemp("updater")).joinpath("updater.exe"))
+    updater_exe: pathlib.Path = dirs.updaterdir / 'updater.exe'
     shutil.copyfile(customopt_updater_exe, str(updater_exe))
     
-    p0 = subprocess.Popen([updater_exe], env=_testing_make_config(
+    p0 = subprocess.Popen([str(updater_exe)], env=_testing_make_config(
         mod="updater",
         extra={
             "DEBUG_WAIT": customopt_debug_wait,
-            "REPO_DIR": str(repodir_updater),
-            "REPO_CHK_DIR": str(repodir_updater.parent.joinpath("repo_chk")),
+            "REPO_DIR": str(dirs.repodir_updater),
+            "REPO_CHK_DIR": str(dirs.repodir_updater_chk),
         }))
     p1 = subprocess.Popen([customopt_python_exe, "-m", "startup"], env=_testing_make_config(
         mod="server",
         extra={
             "DEBUG_WAIT": customopt_debug_wait,
-            "REPO_DIR": str(repodir_s),
+            "REPO_DIR": str(dirs.repodir_s),
         }))
     try: p0.communicate(timeout=(None if customopt_debug_wait != "OFF" else 10))
     except: pass
