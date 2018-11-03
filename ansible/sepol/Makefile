@@ -6,7 +6,7 @@ all:
 
 seport:
 	semanage port -a -t http_port_t -p tcp 5200 || true
-	semanage port -m -t http_port_t -p tcp 5200
+	semanage port -m -t http_port_t -p tcp 5201
 
 sereload: pspol.pp
 	semodule -i pspol.pp
