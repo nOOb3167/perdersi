@@ -2,7 +2,11 @@ import flask.testing
 import git
 from git.objects.fun import (tree_entries_from_data as git_objects_fun_tree_entries_from_data)
 from gitdb.db.loose import (LooseObjectDB as gitdb_db_loose_LooseObjectDB)
-from os import (makedirs as os_makedirs)
+from importlib import (import_module as importlib_import_module)
+from json import (dumps as json_dumps,
+                  loads as json_loads)
+from os import (environ as os_environ,
+                makedirs as os_makedirs)
 from os.path import (dirname as os_path_dirname,
                      exists as os_path_exists,
                      isdir as os_path_isdir)
@@ -37,14 +41,15 @@ class RetCode500(RetCodeErr):
 def _testing_make_config(
     mod: str,
     extra: dict = {}
-):
-    import importlib, json, os
-    env = os.environ.copy()
-    _config = importlib.import_module("ps_config_" + mod).config.copy()
+) -> dict:
+    # merge module config with extra
+    _config = importlib_import_module("ps_config_" + mod).config.copy()
     _config["TESTING"] = True
     for k in extra:
         _config[k] = extra[k]
-    env["PS_CONFIG"] = json.dumps(_config)
+    # store among environment vars as PS_CONFIG json-formatted
+    env = os_environ.copy()
+    env["PS_CONFIG"] = json_dumps(_config)
     return env
 
 @pytest.fixture(scope="session")
@@ -61,13 +66,12 @@ def repodir_s(tmpdir_factory) -> pathlib.Path:
 
 @pytest.fixture(scope="session")
 def server_run_prepare_for_testing(repodir_s):
-    import json
     env = _testing_make_config(
         mod="server",
         extra={
             "REPO_DIR": str(repodir_s),
         })
-    _config = json.loads(env['PS_CONFIG'])
+    _config = json_loads(env['PS_CONFIG'])
     server_config_flask(_config)
 
 @pytest.fixture(scope="session")
