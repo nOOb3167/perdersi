@@ -106,7 +106,6 @@ add_custom_target(TestsServerRun
 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 	DEPENDS ps_config_server.py
 )
-add_dependencies(TestsServerRun TestsServerPreload)
 
 add_custom_target(Tests
 	COMMAND
@@ -121,7 +120,6 @@ add_custom_target(Tests
 	WORKING_DIRECTORY ${PYSRC}
 	DEPENDS ps_config_server.py ps_config_updater.py
 )
-add_dependencies(Tests updater stage2 tupdater2 tupdater3)
 
 add_custom_target(TestsDeploy
 	COMMAND
