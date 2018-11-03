@@ -71,27 +71,10 @@ endif()
 set(PYSRC ${CMAKE_SOURCE_DIR}/../files/)
 set(PYPATH "PYTHONPATH=${CMAKE_BINARY_DIR}${SEP}${PYSRC}")
 
-add_custom_command(
-	COMMENT "Generating Config Module (ps_config_server.py)"
-	OUTPUT ps_config_server.py
-	COMMAND
-		${CMAKE_COMMAND} -E copy
-			${PYSRC}${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
-			ps_config_server.py
-	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-	DEPENDS ${PYSRC}${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py
-)
 configure_file("${PYSRC}${PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME}.py" ps_config_deploy.py @ONLY)
-add_custom_command(
-	COMMENT "Generating Config Module (ps_config_updater.py)"
-	OUTPUT ps_config_updater.py
-	COMMAND
-		${CMAKE_COMMAND} -E copy
-			${PYSRC}${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py
-			ps_config_updater.py
-	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-	DEPENDS ${PYSRC}${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py
-)
+configure_file("${PYSRC}${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py" ps_config_server.py @ONLY)
+configure_file("${PYSRC}${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py" ps_config_updater.py @ONLY)
+
 add_custom_command(
 	COMMENT "Generating Config Header (ps_config_updater.h)"
 	OUTPUT ps_config_updater.h
@@ -99,7 +82,7 @@ add_custom_command(
 		${CMAKE_COMMAND} -E env "${PYPATH}"
 		${Python3_EXECUTABLE} -m genhdr
 			--src_mod ${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}
-			--dst ${CMAKE_BINARY_DIR}/ps_config_updater.h
+			--dst ps_config_updater.h
 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 	DEPENDS ${PYSRC}${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py ${PYSRC}genhdr.py
 )
@@ -123,6 +106,7 @@ add_custom_target(TestsServerRun
 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 	DEPENDS ps_config_server.py
 )
+add_dependencies(TestsServerRun TestsServerPreload)
 
 add_custom_target(Tests
 	COMMAND
