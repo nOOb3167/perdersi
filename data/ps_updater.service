@@ -1,0 +1,14 @@
+[Unit]
+Description=ps_updater
+Before=nginx.service
+BindsTo=nginx.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/ps_updater_starter.sh
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+WantedBy=nginx.service

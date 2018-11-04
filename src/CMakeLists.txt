@@ -68,6 +68,7 @@ if(WIN32)
 else()
 	set(SEP ":")
 endif()
+set(DATASRC ${CMAKE_SOURCE_DIR}/../data/)
 set(PYSRC ${CMAKE_SOURCE_DIR}/../files/)
 set(PYPATH "PYTHONPATH=${CMAKE_BINARY_DIR}${SEP}${PYSRC}")
 
@@ -129,4 +130,17 @@ add_custom_target(TestsDeploy
 	DEPENDS ps_config_deploy.py
 )
 
-install(TARGETS updater stage2 RUNTIME DESTINATION ".")
+install(TARGETS updater stage2 RUNTIME DESTINATION "chk")
+install(
+	FILES
+		${CMAKE_BINARY_DIR}/ps_config_server.py
+		${PYSRC}/server.py
+		${PYSRC}/startup.py
+	DESTINATION "web"
+)
+install(
+	FILES
+		${DATASRC}/ps_updater.service
+		${DATASRC}/ps_updater_starter.sh
+	DESTINATION "data"
+)
