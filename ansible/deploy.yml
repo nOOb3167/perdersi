@@ -1,0 +1,32 @@
+- name: Deploy
+  hosts: perdersi
+  remote_user: root
+  become: yes
+
+  vars:
+    ansible_python_interpreter: python3
+
+  tasks:
+  - name: Distro Check
+    fail:
+      msg: 'Not fedora'
+    when: ansible_facts['distribution'] != 'Fedora'
+  - name: Build
+    block:
+      - name: Updater Service Copy
+        copy:
+          remote_src=yes
+          src=/usr/local/perdersi/deploy/data/ps_updater.service
+          dest=/etc/systemd/system/
+      - name: Updater Starter Copy
+        copy:
+          remote_src=yes
+          src=/usr/local/perdersi/deploy/data/ps_updater_starter.sh
+          dest=/usr/local/bin/
+          mode=0755
+      - name: Updater Service Restart
+        service:
+          name=ps_updater.service
+          daemon_reload=yes
+          enabled=yes
+          state=restarted

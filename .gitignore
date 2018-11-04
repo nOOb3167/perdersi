@@ -1,6 +1,7 @@
 .coverage
 /cov_annotate
 /ansible/base.retry
+/ansible/deploy.retry
 /ansible/se.retry
 /ansible/updater.retry
 /files/__pycache__
