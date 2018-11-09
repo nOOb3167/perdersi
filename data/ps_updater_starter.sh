@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 set -e
 
 VENPATH=/usr/local/perdersi/venv/bin
