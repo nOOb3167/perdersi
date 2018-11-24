@@ -20,6 +20,7 @@ option(PS_DEBUG_WAIT "waits for debugger at startup (win32) (ON/OFF)" OFF)
 set(PS_CONFIG_SERVER_PYTHON_MODULE_NAME config_server_default CACHE STRING "")
 set(PS_CONFIG_UPDATER_PYTHON_MODULE_NAME config_updater_default CACHE STRING "")
 set(PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME config_server_default CACHE STRING "")
+set(PS_ANSIBLE_PLAYBOOK_CMD ansible-playbook CACHE STRING "")
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
 
@@ -120,6 +121,12 @@ add_custom_target(Tests
 			--customopt_updater_exe=$<TARGET_FILE:updater>
 	WORKING_DIRECTORY ${PYSRC}
 	DEPENDS ps_config_server.py ps_config_updater.py
+)
+
+add_custom_target(TestsDeployCoor
+	COMMAND
+		${PS_ANSIBLE_PLAYBOOK_CMD} "${PYSRC}/../ansible/deploy.yml"
+	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
 add_custom_target(TestsDeploy
