@@ -11,41 +11,25 @@
     fail:
       msg: 'Not fedora'
     when: ansible_facts['distribution'] != 'Fedora'
-  - name: Updater
-    block:
-      - name: Updater Service Copy
-        copy:
-          remote_src=yes
-          src=/usr/local/perdersi/deploy/data/ps_updater.service
-          dest=/etc/systemd/system/
-      - name: Updater Starter Copy
-        copy:
-          remote_src=yes
-          src=/usr/local/perdersi/deploy/data/ps_updater_starter.sh
-          dest=/usr/local/bin/
-          mode=0755
-      - name: Updater Service Restart
-        service:
-          name=ps_updater.service
-          daemon_reload=yes
-          enabled=yes
-          state=restarted
-  - name: Coor
-    block:
-      - name: Coor Service Copy
-        copy:
-          remote_src=yes
-          src=/usr/local/perdersi/deploy/data/ps_coor.service
-          dest=/etc/systemd/system/
-      - name: Coor Starter Copy
-        copy:
-          remote_src=yes
-          src=/usr/local/perdersi/deploy/data/ps_coor_starter.sh
-          dest=/usr/local/bin/
-          mode=0755
-      - name: Coor Service Restart
-        service:
-          name=ps_coor.service
-          daemon_reload=yes
-          enabled=yes
-          state=restarted
+  - name: Copy
+    copy:
+      src={{ item.src }}
+      dest={{ item.dest }}
+      mode={{ item.mode }}
+    with_items:
+      - { src: '../data/ps_coor.service', dest: '/etc/systemd/system/', mode: '0644' }
+      - { src: '../data/ps_updater.service', dest: '/etc/systemd/system/', mode: '0644' }
+      - { src: '../data/ps_coor_starter.sh', dest: '/usr/local/bin/', mode: '0755' }
+      - { src: '../data/ps_updater_starter.sh', dest: '/usr/local/bin/', mode: '0755' }
+      - { src: '../files/server_coor.py', dest: '/usr/local/perdersi/deploy/web/', mode: '0644' }
+      - { src: '../files/a.py', dest: '/usr/local/perdersi/deploy/web/', mode: '0644' }
+      # FIXME: also ps_config_server
+  - name: Service Restart
+    service:
+      name=ps_coor.service
+      daemon_reload=yes
+      enabled=yes
+      state=restarted
+    with_items:
+      - ps_coor.service
+      - ps_updater.service

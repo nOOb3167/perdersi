@@ -44,7 +44,7 @@ add_custom_target(TestsDeployCoor
 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
-if(PY_CONFIG_ONLY)
+if(PS_CONFIG_ONLY)
 	return()
 endif()
 
