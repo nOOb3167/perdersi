@@ -17,12 +17,36 @@ cmake_policy(SET CMP0074 NEW) # PackageName_ROOT variables
 project(test)
 
 option(PS_DEBUG_WAIT "waits for debugger at startup (win32) (ON/OFF)" OFF)
+set(PS_CONFIG_ONLY OFF CACHE BOOL "")
 set(PS_CONFIG_SERVER_PYTHON_MODULE_NAME config_server_default CACHE STRING "")
 set(PS_CONFIG_UPDATER_PYTHON_MODULE_NAME config_updater_default CACHE STRING "")
 set(PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME config_server_default CACHE STRING "")
 set(PS_ANSIBLE_PLAYBOOK_CMD ansible-playbook CACHE STRING "")
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
+
+if(WIN32)
+	set(SEP "\\;")
+else()
+	set(SEP ":")
+endif()
+set(DATASRC ${CMAKE_SOURCE_DIR}/../data/)
+set(PYSRC ${CMAKE_SOURCE_DIR}/../files/)
+set(PYPATH "PYTHONPATH=${CMAKE_BINARY_DIR}${SEP}${PYSRC}")
+
+configure_file("${PYSRC}${PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME}.py" ps_config_deploy.py @ONLY)
+configure_file("${PYSRC}${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py" ps_config_server.py @ONLY)
+configure_file("${PYSRC}${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py" ps_config_updater.py @ONLY)
+
+add_custom_target(TestsDeployCoor
+	COMMAND
+		${PS_ANSIBLE_PLAYBOOK_CMD} "${PYSRC}/../ansible/deploy.yml"
+	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+)
+
+if(PY_CONFIG_ONLY)
+	return()
+endif()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
@@ -63,19 +87,6 @@ target_link_libraries(tupdater3 PUBLIC common)
 target_compile_definitions(tupdater3 PUBLIC _PS_DEBUG_TUPDATER=3)
 
 find_package(Python3 REQUIRED)
-
-if(WIN32)
-	set(SEP "\\;")
-else()
-	set(SEP ":")
-endif()
-set(DATASRC ${CMAKE_SOURCE_DIR}/../data/)
-set(PYSRC ${CMAKE_SOURCE_DIR}/../files/)
-set(PYPATH "PYTHONPATH=${CMAKE_BINARY_DIR}${SEP}${PYSRC}")
-
-configure_file("${PYSRC}${PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME}.py" ps_config_deploy.py @ONLY)
-configure_file("${PYSRC}${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py" ps_config_server.py @ONLY)
-configure_file("${PYSRC}${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py" ps_config_updater.py @ONLY)
 
 add_custom_command(
 	COMMENT "Generating Config Header (ps_config_updater.h)"
@@ -121,12 +132,6 @@ add_custom_target(Tests
 			--customopt_updater_exe=$<TARGET_FILE:updater>
 	WORKING_DIRECTORY ${PYSRC}
 	DEPENDS ps_config_server.py ps_config_updater.py
-)
-
-add_custom_target(TestsDeployCoor
-	COMMAND
-		${PS_ANSIBLE_PLAYBOOK_CMD} "${PYSRC}/../ansible/deploy.yml"
-	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
 add_custom_target(TestsDeploy
