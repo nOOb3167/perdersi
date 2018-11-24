@@ -5,12 +5,17 @@
 
   vars:
     ansible_python_interpreter: python3
+    # SET EXTERNALLY: ps_cmake_binary_dir
 
   tasks:
   - name: Distro Check
-    fail:
-      msg: 'Not fedora'
-    when: ansible_facts['distribution'] != 'Fedora'
+    block:
+      - fail:
+          msg: 'Missing variable'
+        when: ps_cmake_binary_dir is not defined
+      - fail:
+          msg: 'Not fedora'
+        when: ansible_facts['distribution'] != 'Fedora'
   - name: Copy
     copy:
       src={{ item.src }}
@@ -21,9 +26,11 @@
       - { src: '../data/ps_updater.service', dest: '/etc/systemd/system/', mode: '0644' }
       - { src: '../data/ps_coor_starter.sh', dest: '/usr/local/bin/', mode: '0755' }
       - { src: '../data/ps_updater_starter.sh', dest: '/usr/local/bin/', mode: '0755' }
+      - { src: '{{ ps_cmake_binary_dir }}/ps_config_deploy.py', dest: '/usr/local/perdersi/deploy/web/', mode: '0644' }
+      - { src: '{{ ps_cmake_binary_dir }}/ps_config_server.py', dest: '/usr/local/perdersi/deploy/web/', mode: '0644' }
+      - { src: '../files/recursive_timestamp.py', dest: '/usr/local/perdersi/deploy/web/', mode: '0644' }
       - { src: '../files/server_coor.py', dest: '/usr/local/perdersi/deploy/web/', mode: '0644' }
-      - { src: '../files/a.py', dest: '/usr/local/perdersi/deploy/web/', mode: '0644' }
-      # FIXME: also ps_config_server
+      - { src: '../files/startup.py', dest: '/usr/local/perdersi/deploy/web/', mode: '0644' }
   - name: Service Restart
     service:
       name=ps_coor.service

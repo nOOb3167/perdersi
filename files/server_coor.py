@@ -1,4 +1,4 @@
-import a
+import recursive_timestamp
 import flask
 from base64 import b32encode as base__b32encode
 from json import loads as json__loads
@@ -27,7 +27,7 @@ def server_config_flask_and_run(_config: confdict):
 def server_run_overridable():
     try: conf = json__loads(os__environ['PS_CONFIG'])
     except: import ps_config_deploy; conf = ps_config_deploy.config.copy()
-    server_config_flask(conf)
+    server_config_flask_and_run(conf)
     server_run()
 
 server_run_overridable()

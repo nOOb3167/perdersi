@@ -40,7 +40,9 @@ configure_file("${PYSRC}${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py" ps_config_up
 
 add_custom_target(TestsDeployCoor
 	COMMAND
-		${PS_ANSIBLE_PLAYBOOK_CMD} "${PYSRC}/../ansible/deploy.yml"
+		${PS_ANSIBLE_PLAYBOOK_CMD}
+			--extra-vars "ps_cmake_binary_dir=${CMAKE_BINARY_DIR}"
+			"${PYSRC}/../ansible/deploy.yml"
 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
