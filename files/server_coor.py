@@ -1,4 +1,4 @@
-import recursive_timestamp
+from timestamp import get_latest_str as timestamp__get_latest_str
 import flask
 from base64 import b32encode as base__b32encode
 from json import loads as json__loads
@@ -12,8 +12,9 @@ server_app: flask.Flask = flask__Flask(__name__, static_url_path = "")
 
 @server_app.route("/", methods=["GET"])
 def index():
-        return f'''
-        hello world
+    q = timestamp__get_latest_str('/root/gittest')
+    return f'''
+        hello world {q}
         '''
 
 def server_config_flask_and_run(_config: confdict):
