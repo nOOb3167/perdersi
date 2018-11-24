@@ -135,6 +135,7 @@ install(
 	FILES
 		${CMAKE_BINARY_DIR}/ps_config_server.py
 		${PYSRC}/server.py
+		${PYSRC}/server_coor.py
 		${PYSRC}/startup.py
 	DESTINATION "web"
 )

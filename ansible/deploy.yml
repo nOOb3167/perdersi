@@ -11,7 +11,7 @@
     fail:
       msg: 'Not fedora'
     when: ansible_facts['distribution'] != 'Fedora'
-  - name: Build
+  - name: Updater
     block:
       - name: Updater Service Copy
         copy:
@@ -27,6 +27,25 @@
       - name: Updater Service Restart
         service:
           name=ps_updater.service
+          daemon_reload=yes
+          enabled=yes
+          state=restarted
+  - name: Coor
+    block:
+      - name: Coor Service Copy
+        copy:
+          remote_src=yes
+          src=/usr/local/perdersi/deploy/data/ps_coor.service
+          dest=/etc/systemd/system/
+      - name: Coor Starter Copy
+        copy:
+          remote_src=yes
+          src=/usr/local/perdersi/deploy/data/ps_coor_starter.sh
+          dest=/usr/local/bin/
+          mode=0755
+      - name: Coor Service Restart
+        service:
+          name=ps_coor.service
           daemon_reload=yes
           enabled=yes
           state=restarted

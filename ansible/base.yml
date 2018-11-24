@@ -39,11 +39,14 @@
           semanage port -m -t http_port_t -p tcp 5200
           semanage port -a -t http_port_t -p tcp 5201 || true
           semanage port -m -t http_port_t -p tcp 5201
+          semanage port -a -t http_port_t -p tcp 5202 || true
+          semanage port -m -t http_port_t -p tcp 5202
       - name: Firewall Port
         shell: |
           firewall-cmd --permanent --add-service=http
           firewall-cmd --permanent --service=http --add-port=5200/tcp
           firewall-cmd --permanent --service=http --add-port=5201/tcp
+          firewall-cmd --permanent --service=http --add-port=5202/tcp
       - name: Firewall Restart
         service:
           name=firewalld
