@@ -12,7 +12,7 @@
 # https://stackoverflow.com/questions/9998679/is-it-possible-to-add-post-install-commands-to-top-level-makefile-generated-by-c/29979349#29979349
 # https://gitlab.kitware.com/cmake/cmake/issues/14089
 #   WORKING_DIRECTORY generator expression support since CMake 3.13
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.10)
 cmake_policy(SET CMP0074 NEW) # PackageName_ROOT variables
 project(test)
 
