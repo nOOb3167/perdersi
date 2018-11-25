@@ -6,6 +6,7 @@
 /ansible/updater.retry
 /files/__pycache__
 /files/config_*.py
+!/files/config_deploy_andrej.py
 !/files/config_updater_default.py
 !/files/config_server_default.py
 /ansible/sepol/pspol.pp
