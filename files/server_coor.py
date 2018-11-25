@@ -5,10 +5,20 @@ from json import loads as json__loads
 from flask import Flask as flask__Flask
 from os import urandom as os__urandom
 from os import environ as os__environ
+from subprocess import run as subprocess__run
 
 confdict = dict
 
 server_app: flask.Flask = flask__Flask(__name__, static_url_path = "")
+
+@server_app.route("/build", methods=["GET"])
+def build():
+    sbuild: str = server_app.config['PS']['WIN']['BUILD']
+    srsync: str = server_app.config['PS']['WIN']['RSYNC']
+    subprocess__run(sbuild, shell=True, timeout=300, check=True)
+    subprocess__run(srsync, shell=True, timeout=300, check=True)
+    #q = timestamp__get_latest_str('/root/gittest')
+    return f'''okay'''
 
 @server_app.route("/", methods=["GET"])
 def index():
