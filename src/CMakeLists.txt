@@ -144,17 +144,23 @@ add_custom_target(TestsDeploy
 	DEPENDS ps_config_deploy.py
 )
 
-install(TARGETS updater stage2 RUNTIME DESTINATION "chk")
+install(TARGETS updater stage2 RUNTIME DESTINATION ".")
 install(
 	FILES
+		${CMAKE_BINARY_DIR}/ps_config_deploy.py
 		${CMAKE_BINARY_DIR}/ps_config_server.py
+		${CMAKE_BINARY_DIR}/ps_config_updater.py
+		${PYSRC}/coor.py
 		${PYSRC}/server.py
 		${PYSRC}/server_coor.py
 		${PYSRC}/startup.py
+		${PYSRC}/timestamp.py
 	DESTINATION "web"
 )
 install(
 	FILES
+		${DATASRC}/ps_coor.service
+		${DATASRC}/ps_coor_starter.sh
 		${DATASRC}/ps_updater.service
 		${DATASRC}/ps_updater_starter.sh
 	DESTINATION "data"
