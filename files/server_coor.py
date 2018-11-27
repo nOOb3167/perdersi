@@ -1,6 +1,7 @@
 from timestamp import get_latest_str as timestamp__get_latest_str
 import flask
 from base64 import b32encode as base__b32encode
+from coor import execself as coor__execself
 from json import loads as json__loads
 from flask import Flask as flask__Flask
 from os import urandom as os__urandom
@@ -13,19 +14,29 @@ server_app: flask.Flask = flask__Flask(__name__, static_url_path = "")
 
 @server_app.route("/build", methods=["GET"])
 def build():
+    stagedir: str = server_app.config['PS']['STAGEDIR']
     sbuild: str = server_app.config['PS']['WIN']['BUILD']
     srsync: str = server_app.config['PS']['WIN']['RSYNC']
     subprocess__run(sbuild, shell=True, timeout=300, check=True)
     subprocess__run(srsync, shell=True, timeout=300, check=True)
-    #q = timestamp__get_latest_str('/root/gittest')
+    ts: str = timestamp__get_latest_str(stagedir)
+    return f'''okay [ts=[{ts}]]'''
+
+@server_app.route("/commit", methods=["GET"])
+def commit():
+    stagedir: str = server_app.config['PS']['STAGEDIR']
+    repodir: str = server_app.config['PS']['REPODIR']
+    coor__execself('refs/heads/master', stagedir, repodir)
     return f'''okay'''
 
 @server_app.route("/", methods=["GET"])
 def index():
-    q = timestamp__get_latest_str('/root/gittest')
+    stagedir: str = server_app.config['PS']['STAGEDIR']
+    ts: str = timestamp__get_latest_str(stagedir)
     return f'''
-        hello world {q}
-        '''
+<p>Timestamp: <b>{ts}</b></p>
+<a href="/build">Build</a>
+'''
 
 def server_config_flask_and_run(_config: confdict):
     global server_app
