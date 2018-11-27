@@ -4,13 +4,21 @@ from base64 import b32encode as base__b32encode
 from coor import execself as coor__execself
 from json import loads as json__loads
 from flask import Flask as flask__Flask
+from flask import request as flask__request
 from os import urandom as os__urandom
 from os import environ as os__environ
 from subprocess import run as subprocess__run
+from urllib.parse import urljoin as urllib_parse__urljoin
 
 confdict = dict
 
 server_app: flask.Flask = flask__Flask(__name__, static_url_path = "")
+
+def ps_url_for(u):
+    if 'X-Real-URL' in flask__request.headers:
+        return urllib_parse__urljoin(flask__request.headers['X-Real-URL'], u)
+    else:
+        raise RuntimeError()
 
 @server_app.route("/build", methods=["GET"])
 def build():
@@ -35,7 +43,7 @@ def index():
     ts: str = timestamp__get_latest_str(stagedir)
     return f'''
 <p>Timestamp: <b>{ts}</b></p>
-<a href="/build">Build</a>
+<a href="{ps_url_for('build')}">Build</a>
 '''
 
 def server_config_flask_and_run(_config: confdict):
