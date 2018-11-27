@@ -28,7 +28,7 @@ def build():
     subprocess__run(sbuild, shell=True, timeout=300, check=True)
     subprocess__run(srsync, shell=True, timeout=300, check=True)
     ts: str = timestamp__get_latest_str(stagedir)
-    return f'''okay [ts=[{ts}]]'''
+    return f'''<p>Timestamp: <b>{ts}</b></p>'''
 
 @server_app.route("/commit", methods=["GET"])
 def commit():
