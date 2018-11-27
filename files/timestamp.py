@@ -24,8 +24,8 @@ def get_latest(p: dirname_t) -> float:
     dirs: List[dirname_t] = [w[0] for w in walk]
     files: List[fname_t] = [pathlib__Path(w[0]) / str(f) for w in walk for f in w[2]]
 
-    dirs_max = max([getmtime(v) for v in dirs])
-    files_max = max([getmtime(v) for v in files])
+    dirs_max = max([getmtime(v) for v in dirs]) if len(dirs) else 0
+    files_max = max([getmtime(v) for v in files]) if len(files) else 0
 
     any_max = max(dirs_max, files_max)
     return any_max

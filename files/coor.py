@@ -34,6 +34,10 @@ def copy_from_todir(src: pathlib.Path, dstdir: pathlib.Path):
     else:
         shutil__copy2(src, dst)
 
+def copy_fromdir_todir(srcdir: pathlib.Path, dstdir: pathlib.Path):
+    for x in [pathlib__Path(a) for a in glob__glob(str(srcdir.joinpath('*')))]:
+        copy_from_todir(src=x, dstdir=repodir)
+
 def run():
     # get args
     parser = argparse__ArgumentParser()
@@ -45,11 +49,10 @@ def run():
     stagedir: pathlib.Path = pathlib__Path(args.stagedir[0])
     repodir: pathlib.Path = pathlib__Path(args.repodir[0])
     assert stagedir.is_dir() and repodir.is_dir()
+    # repo clean
+    repo.git.clean(d=True, f=True)
     # stage copy to repo
-    patternall: str = str(stagedir.joinpath('*'))
-    fnameall: typing.List[str] = glob__glob(patternall)
-    for x in [pathlib__Path(a) for a in fnameall]:
-        copy_from_todir(src=x, dstdir=repodir)
+    copy_fromdir_todir(srcdir=stagedir, dstdir=repodir)
     # repo add files and commit
     repo: git.Repo = repo_create_ensure(str(repodir))
     repo.git.add(A=True)
