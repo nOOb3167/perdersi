@@ -16,6 +16,7 @@ cmake_minimum_required(VERSION 3.10)
 cmake_policy(SET CMP0074 NEW) # PackageName_ROOT variables
 project(test)
 
+option(PS_MARKER_REMOTE "" OFF)
 option(PS_DEBUG_WAIT "waits for debugger at startup (win32) (ON/OFF)" OFF)
 set(PS_CONFIG_ONLY OFF CACHE BOOL "")
 set(PS_CONFIG_SERVER_PYTHON_MODULE_NAME config_server_default CACHE STRING "")
@@ -34,9 +35,10 @@ set(DATASRC ${CMAKE_SOURCE_DIR}/data/)
 set(PYSRC ${CMAKE_SOURCE_DIR}/files/)
 set(PYPATH "PYTHONPATH=${CMAKE_BINARY_DIR}${SEP}${PYSRC}")
 
-configure_file("${PYSRC}${PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME}.py" ps_config_deploy.py @ONLY)
-configure_file("${PYSRC}${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py" ps_config_server.py @ONLY)
-configure_file("${PYSRC}${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py" ps_config_updater.py @ONLY)
+configure_file("${CMAKE_SOURCE_DIR}/cmake/marker_remote.in" ps_marker_remote @ONLY)
+configure_file("${PYSRC}/${PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME}.py" ps_config_deploy.py @ONLY)
+configure_file("${PYSRC}/${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py" ps_config_server.py @ONLY)
+configure_file("${PYSRC}/${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py" ps_config_updater.py @ONLY)
 
 set(TARFILES
 	${CMAKE_BINARY_DIR}/ps_config_deploy.py
