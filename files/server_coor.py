@@ -16,7 +16,7 @@ server_app: flask.Flask = flask__Flask(__name__, static_url_path = "")
 
 def ps_url_for(u):
     if 'X-Real-URL' in flask__request.headers:
-        return urllib_parse__urljoin(flask__request.headers['X-Real-URL'], u)
+        return urllib_parse__urljoin(flask__request.headers['X-Real-ROOT'], u)
     else:
         raise RuntimeError()
 
