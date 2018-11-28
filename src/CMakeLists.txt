@@ -55,8 +55,10 @@ set(TARFILES
 
 add_custom_command(
 	OUTPUT ${CMAKE_BINARY_DIR}/coor.tar
-	COMMAND
-		${CMAKE_COMMAND} -E tar cf ${CMAKE_BINARY_DIR}/coor.tar -- ${TARFILES}
+	COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/coor/
+	COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/coor/
+	COMMAND ${CMAKE_COMMAND} -E copy ${TARFILES} ${CMAKE_BINARY_DIR}/coor/
+	COMMAND ${CMAKE_COMMAND} -E tar cf ${CMAKE_BINARY_DIR}/coor.tar -- ${CMAKE_BINARY_DIR}/coor/
 	DEPENDS ${TARFILES}
 	COMMENT "Archiving coor.tar"
 )
