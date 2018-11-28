@@ -25,10 +25,11 @@ def copy_from_todir(src: pathlib.Path, dstdir: pathlib.Path):
     assert src.name != '.git'
     assert dstdir.is_dir()
     dst: pathlib.Path = dstdir.joinpath(src.name)
-    if dst.is_dir():
-        shutil__rmtree(dst)
-    else:
-        dst.unlink()
+    if dst.exists():
+        if dst.is_dir():
+            shutil__rmtree(dst)
+        else:
+            dst.unlink()
     if src.is_dir():
         shutil__copytree(src, dst)
     else:
@@ -36,7 +37,7 @@ def copy_from_todir(src: pathlib.Path, dstdir: pathlib.Path):
 
 def copy_fromdir_todir(srcdir: pathlib.Path, dstdir: pathlib.Path):
     for x in [pathlib__Path(a) for a in glob__glob(str(srcdir.joinpath('*')))]:
-        copy_from_todir(src=x, dstdir=repodir)
+        copy_from_todir(src=x, dstdir=dstdir)
 
 def run():
     # get args
@@ -49,12 +50,13 @@ def run():
     stagedir: pathlib.Path = pathlib__Path(args.stagedir[0])
     repodir: pathlib.Path = pathlib__Path(args.repodir[0])
     assert stagedir.is_dir() and repodir.is_dir()
+    repo: git.Repo = repo_create_ensure(str(repodir))
     # repo clean
     repo.git.clean(d=True, f=True)
+    repo.git.rm('.', r=True)
     # stage copy to repo
     copy_fromdir_todir(srcdir=stagedir, dstdir=repodir)
     # repo add files and commit
-    repo: git.Repo = repo_create_ensure(str(repodir))
     repo.git.add(A=True)
     commit: git.Commit = repo.index.commit('ccc')
     # repo set ref
