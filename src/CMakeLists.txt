@@ -38,12 +38,36 @@ configure_file("${PYSRC}${PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME}.py" ps_config_dep
 configure_file("${PYSRC}${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py" ps_config_server.py @ONLY)
 configure_file("${PYSRC}${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py" ps_config_updater.py @ONLY)
 
+set(TARFILES
+	${CMAKE_BINARY_DIR}/ps_config_deploy.py
+	${CMAKE_BINARY_DIR}/ps_config_server.py
+	${CMAKE_BINARY_DIR}/ps_config_updater.py
+	${DATASRC}/ps_coor.service
+	${DATASRC}/ps_coor_starter.sh
+	${DATASRC}/ps_updater.service
+	${DATASRC}/ps_updater_starter.sh
+	${PYSRC}/coor.py
+	${PYSRC}/timestamp.py
+	${PYSRC}/server.py
+	${PYSRC}/server_coor.py
+	${PYSRC}/startup.py
+)
+
+add_custom_command(
+	OUTPUT ${CMAKE_BINARY_DIR}/coor.tar
+	COMMAND
+		${CMAKE_COMMAND} -E tar cf ${CMAKE_BINARY_DIR}/coor.tar -- ${TARFILES}
+	DEPENDS ${TARFILES}
+	COMMENT "Archiving coor.tar"
+)
+
 add_custom_target(TestsDeployCoor
 	COMMAND
 		${PS_ANSIBLE_PLAYBOOK_CMD}
 			--extra-vars "ps_cmake_binary_dir=${CMAKE_BINARY_DIR}"
 			"${PYSRC}/../ansible/deploy.yml"
 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+	DEPENDS ${CMAKE_BINARY_DIR}/coor.tar
 )
 
 if(PS_CONFIG_ONLY)
@@ -145,23 +169,3 @@ add_custom_target(TestsDeploy
 )
 
 install(TARGETS updater stage2 RUNTIME DESTINATION ".")
-install(
-	FILES
-		${CMAKE_BINARY_DIR}/ps_config_deploy.py
-		${CMAKE_BINARY_DIR}/ps_config_server.py
-		${CMAKE_BINARY_DIR}/ps_config_updater.py
-		${PYSRC}/coor.py
-		${PYSRC}/server.py
-		${PYSRC}/server_coor.py
-		${PYSRC}/startup.py
-		${PYSRC}/timestamp.py
-	DESTINATION "web"
-)
-install(
-	FILES
-		${DATASRC}/ps_coor.service
-		${DATASRC}/ps_coor_starter.sh
-		${DATASRC}/ps_updater.service
-		${DATASRC}/ps_updater_starter.sh
-	DESTINATION "data"
-)
