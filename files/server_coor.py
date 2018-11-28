@@ -15,7 +15,7 @@ confdict = dict
 server_app: flask.Flask = flask__Flask(__name__, static_url_path = "")
 
 def ps_url_for(u):
-    if 'X-Real-URL' in flask__request.headers:
+    if 'X-Real-ROOT' in flask__request.headers:
         return urllib_parse__urljoin(flask__request.headers['X-Real-ROOT'], u)
     else:
         raise RuntimeError()
@@ -43,7 +43,8 @@ def index():
     ts: str = timestamp__get_latest_str(stagedir)
     return f'''
 <p>Timestamp: <b>{ts}</b></p>
-<a href="{ps_url_for('build')}">Build</a>
+<p><a href="{ps_url_for('build')}">Build</a></p>
+<p><a href="{ps_url_for('commit')}">Commit</a></p>
 '''
 
 def server_config_flask_and_run(_config: confdict):
