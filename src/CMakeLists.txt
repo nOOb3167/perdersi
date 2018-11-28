@@ -54,13 +54,13 @@ set(TARFILES
 )
 
 add_custom_command(
-	OUTPUT ${CMAKE_BINARY_DIR}/coor.tar
+	OUTPUT ${CMAKE_BINARY_DIR}/coor.tar.gz
 	COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/coor/
 	COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/coor/
 	COMMAND ${CMAKE_COMMAND} -E copy ${TARFILES} ${CMAKE_BINARY_DIR}/coor/
-	COMMAND ${CMAKE_COMMAND} -E tar cf ${CMAKE_BINARY_DIR}/coor.tar -- ${CMAKE_BINARY_DIR}/coor/
+	COMMAND ${CMAKE_COMMAND} -E tar czf ${CMAKE_BINARY_DIR}/coor.tar.gz -- ${CMAKE_BINARY_DIR}/coor/
 	DEPENDS ${TARFILES}
-	COMMENT "Archiving coor.tar"
+	COMMENT "Archiving coor.tar.gz"
 )
 
 add_custom_target(TestsDeployCoor
@@ -69,7 +69,7 @@ add_custom_target(TestsDeployCoor
 			--extra-vars "ps_cmake_binary_dir=${CMAKE_BINARY_DIR}"
 			"${PYSRC}/../ansible/deploy.yml"
 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-	DEPENDS ${CMAKE_BINARY_DIR}/coor.tar
+	DEPENDS ${CMAKE_BINARY_DIR}/coor.tar.gz
 )
 
 if(PS_CONFIG_ONLY)
