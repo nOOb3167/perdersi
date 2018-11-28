@@ -326,7 +326,7 @@ def test_updater(
             "REPO_DIR": str(dirs.repodir_updater),
             "REPO_CHK_DIR": str(dirs.repodir_updater_chk),
         }))
-    p1 = subprocess.Popen([customopt_python_exe, "-m", "startup"], env=_testing_make_config(
+    p1 = subprocess.Popen([customopt_python_exe, "-m", "startup", "server"], env=_testing_make_config(
         mod="server",
         extra={
             "DEBUG_WAIT": customopt_debug_wait,

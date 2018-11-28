@@ -522,8 +522,8 @@ int main(int argc, char **argv)
 
 	pt_t config = cruft_config_read();
 	boost::filesystem::path chkoutdir = cruft_config_get_path(config, "REPO_CHK_DIR");
-	boost::filesystem::path updatrpath = chkoutdir / config.get<std::string>("UPDATER_EXE_RELATIVE");
 	boost::filesystem::path stage2path = chkoutdir / config.get<std::string>("UPDATER_STAGE2_EXE_RELATIVE");
+	std::string updatr = config.get<std::string>("UPDATER_EXE_RELATIVE");
 
 	unique_ptr_gitrepository repo(ns_git::repository_ensure(config.get<std::string>("REPO_DIR")));
 
@@ -532,8 +532,8 @@ int main(int argc, char **argv)
 
 	std::cout << "repodir: " << git_repository_path(repo.get()) << std::endl;
 	std::cout << "chkodir: " << chkoutdir.string() << std::endl;
-	std::cout << "updatrp: " << updatrpath.string() << std::endl;
 	std::cout << "stage2p: " << stage2path.string() << std::endl;
+	std::cout << "updatr: " << updatr << std::endl;
 	std::cout << "head: " << head << std::endl;
 
 	std::vector<shahex_t> trees = get_trees_writing(&client, repo.get(), head);
@@ -543,7 +543,7 @@ int main(int argc, char **argv)
 	do {
 		if (arg_skipselfupdate)
 			break;
-		if (!ensuring_content_replace_running_exe(blob_tree_entry_content(repo.get(), head, updatrpath.string()), cruft_current_executable_filename()))
+		if (!ensuring_content_replace_running_exe(blob_tree_entry_content(repo.get(), head, updatr), cruft_current_executable_filename()))
 			break;
 
 		cruft_exec_file_lowlevel(cruft_current_executable_filename(), { "--skipselfupdate" }, std::chrono::milliseconds(0));
