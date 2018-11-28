@@ -16,33 +16,35 @@
       - fail:
           msg: 'Not fedora'
         when: ansible_facts['distribution'] != 'Fedora'
-  - name: Dir
-    shell: |
-      rm -rf /usr/local/perdersi/deploy/unarchive
-      mkdir  /usr/local/perdersi/deploy/unarchive
-  - name: Unarchive
-    unarchive:
-      src: '{{ ps_cmake_binary_dir }}/coor.tar.gz'
-      dest: '/usr/local/perdersi/deploy/unarchive'
-      extra_opts:
-        - --strip-components=1
-  - name: Copy
-    shell: |
-      mkdir -p /usr/local/perdersi/web/
-      cp -f /usr/local/perdersi/deploy/unarchive/ps_coor.service    /etc/systemd/system/
-      cp -f /usr/local/perdersi/deploy/unarchive/ps_updater.service /etc/systemd/system/
-      cp -f /usr/local/perdersi/deploy/unarchive/ps_coor_starter.sh    /usr/local/bin/
-      cp -f /usr/local/perdersi/deploy/unarchive/ps_updater_starter.sh /usr/local/bin/
-      cp -f /usr/local/perdersi/deploy/unarchive/ps_config_deploy.py  /usr/local/perdersi/deploy/web/
-      cp -f /usr/local/perdersi/deploy/unarchive/ps_config_server.py  /usr/local/perdersi/deploy/web/
-      cp -f /usr/local/perdersi/deploy/unarchive/ps_config_updater.py /usr/local/perdersi/deploy/web/
-      cp -f /usr/local/perdersi/deploy/unarchive/coor.py        /usr/local/perdersi/deploy/web/
-      cp -f /usr/local/perdersi/deploy/unarchive/timestamp.py   /usr/local/perdersi/deploy/web/
-      cp -f /usr/local/perdersi/deploy/unarchive/server_coor.py /usr/local/perdersi/deploy/web/
-      cp -f /usr/local/perdersi/deploy/unarchive/startup.py     /usr/local/perdersi/deploy/web/
+  - name: Deploy Files
+    block:
+      - shell: |
+          rm -rf /usr/local/perdersi/deploy/unarchive
+          mkdir  /usr/local/perdersi/deploy/unarchive
+      - name: Unarchive
+        unarchive:
+          src: '{{ ps_cmake_binary_dir }}/coor.tar.gz'
+          dest: '/usr/local/perdersi/deploy/unarchive'
+          extra_opts:
+            - --strip-components=1
+      - name: Copy
+        shell: |
+          mkdir -p /usr/local/perdersi/web/
+          cp -f /usr/local/perdersi/deploy/unarchive/ps_coor.service    /etc/systemd/system/
+          cp -f /usr/local/perdersi/deploy/unarchive/ps_updater.service /etc/systemd/system/
+          cp -f /usr/local/perdersi/deploy/unarchive/ps_coor_starter.sh    /usr/local/bin/
+          cp -f /usr/local/perdersi/deploy/unarchive/ps_updater_starter.sh /usr/local/bin/
+          cp -f /usr/local/perdersi/deploy/unarchive/ps_config_deploy.py  /usr/local/perdersi/deploy/web/
+          cp -f /usr/local/perdersi/deploy/unarchive/ps_config_server.py  /usr/local/perdersi/deploy/web/
+          cp -f /usr/local/perdersi/deploy/unarchive/ps_config_updater.py /usr/local/perdersi/deploy/web/
+          cp -f /usr/local/perdersi/deploy/unarchive/coor.py            /usr/local/perdersi/deploy/web/
+          cp -f /usr/local/perdersi/deploy/unarchive/timestamp.py   /usr/local/perdersi/deploy/web/
+          cp -f /usr/local/perdersi/deploy/unarchive/server.py      /usr/local/perdersi/deploy/web/
+          cp -f /usr/local/perdersi/deploy/unarchive/server_coor.py /usr/local/perdersi/deploy/web/
+          cp -f /usr/local/perdersi/deploy/unarchive/startup.py         /usr/local/perdersi/deploy/web/
   - name: Service Restart
     service:
-      name=ps_coor.service
+      name={{ item }}
       daemon_reload=yes
       enabled=yes
       state=restarted
