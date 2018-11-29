@@ -17,6 +17,7 @@ config = {
     'TESTING': False,
     'STAGEDIR': '{STAGEDIR}',
     'REPODIR': '/usr/local/perdersi/repo_s',
+    'DEPLOYSCRIPT': '@CMAKE_SOURCE_DIR@/files/config_deploy_script_andrej.sh',
     'WIN': {
         'XSFER': r'{RSYNC_PROG} /root/gittest/tmp00/ Andrej@localhost:{BASEP_CYG}/RemPerdersiSrc',
         'CMAKE': r'{SSH_PROG} Andrej@localhost "bash -c \"{CMAKE_PROG} \
