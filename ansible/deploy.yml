@@ -30,19 +30,9 @@
       - name: Copy
         shell: |
           mkdir -p /usr/local/perdersi/web/
-          cp -f /usr/local/perdersi/deploy/unarchive/ps_coor.service    /etc/systemd/system/
-          cp -f /usr/local/perdersi/deploy/unarchive/ps_updater.service /etc/systemd/system/
-          cp -f /usr/local/perdersi/deploy/unarchive/ps_coor_starter.sh    /usr/local/bin/
-          cp -f /usr/local/perdersi/deploy/unarchive/ps_updater_starter.sh /usr/local/bin/
-          cp -f /usr/local/perdersi/deploy/unarchive/ps_config_deploy.py  /usr/local/perdersi/deploy/web/
-          cp -f /usr/local/perdersi/deploy/unarchive/ps_config_server.py  /usr/local/perdersi/deploy/web/
-          cp -f /usr/local/perdersi/deploy/unarchive/ps_config_updater.py /usr/local/perdersi/deploy/web/
-          cp -f /usr/local/perdersi/deploy/unarchive/confaux.py         /usr/local/perdersi/deploy/web/
-          cp -f /usr/local/perdersi/deploy/unarchive/coor.py            /usr/local/perdersi/deploy/web/
-          cp -f /usr/local/perdersi/deploy/unarchive/timestamp.py   /usr/local/perdersi/deploy/web/
-          cp -f /usr/local/perdersi/deploy/unarchive/server.py      /usr/local/perdersi/deploy/web/
-          cp -f /usr/local/perdersi/deploy/unarchive/server_coor.py /usr/local/perdersi/deploy/web/
-          cp -f /usr/local/perdersi/deploy/unarchive/startup.py         /usr/local/perdersi/deploy/web/
+          cp -f /usr/local/perdersi/deploy/unarchive/*.service /etc/systemd/system/
+          cp -f /usr/local/perdersi/deploy/unarchive/*.sh /usr/local/bin/
+          cp -f /usr/local/perdersi/deploy/unarchive/*.py /usr/local/perdersi/deploy/web/
   - name: Service Restart
     service:
       name={{ item }}
