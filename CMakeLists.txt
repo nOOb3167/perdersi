@@ -69,7 +69,7 @@ add_custom_target(TestsDeployCoor
 	COMMAND
 		${PS_ANSIBLE_PLAYBOOK_CMD}
 			--extra-vars "ps_cmake_binary_dir=${CMAKE_BINARY_DIR}"
-			"${PYSRC}/ansible/deploy.yml"
+			"${CMAKE_SOURCE_DIR}/ansible/deploy.yml"
 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 	DEPENDS ${CMAKE_BINARY_DIR}/coor.tar.gz
 )

@@ -23,8 +23,10 @@ def ps_url_for(u):
 @server_app.route("/build", methods=["GET"])
 def build():
     stagedir: str = server_app.config['PS']['STAGEDIR']
+    smarkr: str = server_app.config['PS']['WIN']['BUILD_MARKER']
     sbuild: str = server_app.config['PS']['WIN']['BUILD']
     srsync: str = server_app.config['PS']['WIN']['RSYNC']
+    subprocess__run(smarkr, shell=True, timeout=300, check=True)
     subprocess__run(sbuild, shell=True, timeout=300, check=True)
     subprocess__run(srsync, shell=True, timeout=300, check=True)
     ts: str = timestamp__get_latest_str(stagedir)
