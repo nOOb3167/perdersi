@@ -1,11 +1,9 @@
-def sub(a, b):
-    for v in a:
-        a[v] = a[v].format(**b) if type(a[v]) == str else a[v]
+from confaux import sub as confaux__sub
 v = {
     'SSH_PROG': 'ssh -p 6623 -o StrictHostKeyChecking=no',
     'RSYNC_PROG': 'rsync -r -e "{SSH_PROG}"',
 }
-sub(v, v)
+confaux__sub(v, v)
 config = {
     'LISTEN_HOST': 'localhost.localdomain',
     'LISTEN_PORT': '5202',
@@ -20,5 +18,4 @@ config = {
         'RSYNC': '{RSYNC_PROG} Andrej@localhost:/cygdrive/e/prog/perdersi/PerdersiInst/ /usr/local/perdersi/stage/',
     },
 }
-sub(config, v)
-sub(config['WIN'], v)
+confaux__sub(config, v)
