@@ -20,7 +20,7 @@ CMAKE_PARAMS="-DCMAKE_INSTALL_PREFIX=E:/prog/perdersi/RemPerdersiInst \
     -DPS_CONFIG_DEPLOY_PYTHON_MODULE_NAME=config_deploy_andrej"
 
 $RSYNC -e "$SSH" /root/gittest/tmp00/ Andrej@localhost:/cygdrive/e/prog/perdersi/RemPerdersiSrc
-$SSH Andrej@localhost "bash -c $Q $CMAKE $CMAKE_PARAMS $Q"
+$SSH Andrej@localhost "bash -l -c $Q $CMAKE $CMAKE_PARAMS $Q"
 $SSH Andrej@localhost "cat E:/prog/perdersi/RemPerdersiBuild/ps_marker_remote | grep ON"
-$SSH Andrej@localhost "bash -c $Q $CMAKE --build E:/prog/perdersi/RemPerdersiBuild --target INSTALL $Q"
+$SSH Andrej@localhost "bash -l -c $Q $CMAKE --build E:/prog/perdersi/RemPerdersiBuild --target INSTALL $Q"
 $RSYNC -e "$SSH" Andrej@localhost:/cygdrive/e/prog/perdersi/RemPerdersiInst/ /usr/local/perdersi/stage
