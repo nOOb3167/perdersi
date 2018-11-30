@@ -6,7 +6,7 @@ Q="\""
 
 CMAKE="/cygdrive/e/testM/CMake/bin/cmake"
 SSH="ssh -p 6623 -o StrictHostKeyChecking=no"
-RSYNC="rsync -r --delete"
+RSYNC="rsync -r --delete --checksum"
 
 CMAKE_PARAMS="-DCMAKE_INSTALL_PREFIX=E:/prog/perdersi/RemPerdersiInst \
     -S E:/prog/perdersi/RemPerdersiSrc \
