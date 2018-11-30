@@ -17,7 +17,9 @@ CMAKE_PARAMS="-DCMAKE_INSTALL_PREFIX=E:/prog/perdersi/RemPerdersiInst \
     -DSFML_DIR=E:/prog/perdersi/SFMLInst/lib/cmake/SFML \
     -DPython3_ROOT_DIR=C:/Users/Andrej/AppData/Local/Programs/Python/Python37-32 \
     -DPS_MARKER_REMOTE=ON \
-    -DPS_CONFIG_DEPLOY_PYTHON_MODULE_NAME=config_deploy_andrej"
+    -DPS_CONFIG_DEPLOY_PYTHON_MODULE_NAME=config_deploy_andrej \
+    -DPS_CONFIG_SERVER_PYTHON_MODULE_NAME=config_server_andrej \
+    -DPS_CONFIG_UPDATER_PYTHON_MODULE_NAME=config_updater_andrej"
 
 $RSYNC -e "$SSH" /root/gittest/tmp00/ Andrej@localhost:/cygdrive/e/prog/perdersi/RemPerdersiSrc
 $SSH Andrej@localhost "bash -l -c $Q $CMAKE $CMAKE_PARAMS $Q"

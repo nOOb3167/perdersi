@@ -48,7 +48,7 @@ set(TARFILES
 	${DATASRC}/ps_coor_starter.sh
 	${DATASRC}/ps_updater.service
 	${DATASRC}/ps_updater_starter.sh
-        ${PYSRC}/confaux.py
+	${PYSRC}/confaux.py
 	${PYSRC}/coor.py
 	${PYSRC}/timestamp.py
 	${PYSRC}/server.py
