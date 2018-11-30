@@ -1,6 +1,6 @@
 config = {
         "LISTEN_PORT": "5201",
-        "ORIGIN_DOMAIN_API": "perder.si",
+        "ORIGIN_DOMAIN_API": "api.perder.si",
         "REPO_DIR": "repo",
         "REPO_CHK_DIR": "repo_chk",
         "TESTING": False,
