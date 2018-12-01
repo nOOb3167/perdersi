@@ -22,7 +22,7 @@ def ps_url_for(u):
 def build():
     stagedir: str = server_app.config['PS']['STAGEDIR']
     deploy: str = server_app.config['PS']['DEPLOYSCRIPT']
-    subprocess__run(deploy, shell=True, timeout=300, check=True)
+    subprocess__run([deploy, '--build'], timeout=300, check=True)
     ts: str = timestamp__get_latest_str(stagedir)
     return f'''<p>Timestamp: <b>{ts}</b></p>'''
 
