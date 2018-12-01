@@ -1,5 +1,7 @@
-from timestamp import get_latest_str as timestamp__get_latest_str
 import flask
+import subprocess
+import typing
+from timestamp import get_latest_str as timestamp__get_latest_str
 from base64 import b32encode as base__b32encode
 from coor import execself as coor__execself
 from json import loads as json__loads
@@ -33,6 +35,33 @@ def commit():
     coor__execself('refs/heads/master', stagedir, repodir)
     return f'''okay'''
 
+@server_app.route("/status", methods=["GET"])
+def status():
+    deploy: str = server_app.config['PS']['DEPLOYSCRIPT']
+    status: typing.List[str] = []
+    try:
+        p0: subprocess.CompletedProcess = subprocess__run([deploy, '--info-list'], timeout=300, capture_output=True, text=True)
+        p0.check_returncode()
+    except:
+        raise RuntimeError(p0)
+    infos: typing.List[str] = p0.stdout.split()
+    try:
+        for i in infos:
+            p0: subprocess.CompletedProcess = subprocess__run([deploy, '--info', i], timeout=300, capture_output=True, text=True)
+            p0.check_returncode()
+            status.append(f'''
+            <div style="border: solid; margin: 2rem 0rem 2rem 0rem;">
+            <div>{i}</div>
+            <pre style="border: solid; margin: 0rem">{p0.stdout}</pre>
+            </div>
+            ''')
+    except:
+        raise RuntimeError(p0)
+    return f'''
+<p style="border: solid;">Available: <b>{', '.join(infos)}</b></p>
+<p>{''.join(status)}</p>
+'''
+
 @server_app.route("/", methods=["GET"])
 def index():
     stagedir: str = server_app.config['PS']['STAGEDIR']
@@ -41,10 +70,10 @@ def index():
 <p>Timestamp: <b>{ts}</b></p>
 <p><a href="{ps_url_for('build')}">Build</a></p>
 <p><a href="{ps_url_for('commit')}">Commit</a></p>
+<p><a href="{ps_url_for('status')}">Status</a></p>
 '''
 
 def server_config_flask_and_run(_config: dict):
-    global server_app
     server_app.secret_key = base__b32encode(os__urandom(24)).decode("UTF-8")
     server_app.config['PS'] = _config
     server_app.config['SERVER_NAME'] = _config['ORIGIN_DOMAIN_APP'] + ':' + _config['LISTEN_PORT']
