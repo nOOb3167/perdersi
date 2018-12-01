@@ -10,8 +10,6 @@ from os import environ as os__environ
 from subprocess import run as subprocess__run
 from urllib.parse import urljoin as urllib_parse__urljoin
 
-confdict = dict
-
 server_app: flask.Flask = flask__Flask(__name__, static_url_path = "")
 
 def ps_url_for(u):
@@ -45,7 +43,7 @@ def index():
 <p><a href="{ps_url_for('commit')}">Commit</a></p>
 '''
 
-def server_config_flask_and_run(_config: confdict):
+def server_config_flask_and_run(_config: dict):
     global server_app
     server_app.secret_key = base__b32encode(os__urandom(24)).decode("UTF-8")
     server_app.config['PS'] = _config
@@ -58,5 +56,3 @@ def server_run_overridable():
     except: import ps_config_deploy; conf = ps_config_deploy.config.copy()
     server_config_flask_and_run(conf)
     server_run()
-
-server_run_overridable()
