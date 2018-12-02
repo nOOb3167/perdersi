@@ -33,7 +33,7 @@ case $1 in
         $RSYNC -e "$SSH_" Andrej@localhost:/cygdrive/e/prog/perdersi/RemPerdersiInst/ /usr/local/perdersi/stage || psexit transfer remote local
         ;;
     --info-list)
-        echo dirs config marker repo
+        echo dirs config marker repo service
         ;;
     --info)
         case $2 in
@@ -59,11 +59,22 @@ case $1 in
                 sha=$(git show-ref -s refs/heads/master)
                 com=$(git cat-file -p $sha)
                 comdate=$(git show -s --format="%ad" $sha)
+                prevstat=$(git diff --stat HEAD^..HEAD)
                 echo == Latest Commit ==
                 echo $sha "  " refs/heads/master "  " $comdate
                 echo == Commit ==
+                echo "$com"
+                echo == Commit Parent Diffstat ==
+                echo "$prevstat"
+                ;;
+            service)
                 IFS=
-                echo $com
+                echo == Nginx ==
+                echo "$(systemctl status nginx)"
+                echo == Updater ==
+                echo "$(systemctl status ps_updater)"
+                echo == Coor ==
+                echo "$(systemctl status ps_coor)"
                 unset IFS
                 ;;
             *) psexit args info ;;
