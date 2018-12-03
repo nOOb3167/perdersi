@@ -31,14 +31,18 @@
         shell: |
           mkdir -p /usr/local/perdersi/web/
           cp -f /usr/local/perdersi/deploy/unarchive/*.service /etc/systemd/system/
-          cp -f /usr/local/perdersi/deploy/unarchive/*.sh /usr/local/bin/
           cp -f /usr/local/perdersi/deploy/unarchive/*.py /usr/local/perdersi/deploy/web/
+  - name: Nginx Restart
+    service:
+      name: nginx
+      daemon_reload: yes
+      enabled: yes
+      state: reloaded
   - name: Service Restart
     service:
-      name={{ item }}
-      daemon_reload=yes
-      enabled=yes
-      state=restarted
+      name: "{{ item }}"
+      enabled: yes
+      state: restarted
     with_items:
       - ps_coor.service
       - ps_updater.service

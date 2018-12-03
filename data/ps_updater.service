@@ -5,7 +5,8 @@ BindsTo=nginx.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/ps_updater_starter.sh
+ExecStart=/usr/local/perdersi/venv/bin/python3 -m startup server
+Environment="PYTHONPATH=/usr/local/perdersi/deploy/web"
 Restart=on-failure
 RestartSec=5s
 

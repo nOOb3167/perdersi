@@ -5,7 +5,8 @@ BindsTo=nginx.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/ps_coor_starter.sh
+ExecStart=/usr/local/perdersi/venv/bin/python3 -m startup server_coor
+Environment="PYTHONPATH=/usr/local/perdersi/deploy/web"
 Restart=on-failure
 RestartSec=5s
 

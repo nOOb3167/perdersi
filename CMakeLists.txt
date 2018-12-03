@@ -45,9 +45,7 @@ set(TARFILES
 	${CMAKE_BINARY_DIR}/ps_config_server.py
 	${CMAKE_BINARY_DIR}/ps_config_updater.py
 	${DATASRC}/ps_coor.service
-	${DATASRC}/ps_coor_starter.sh
 	${DATASRC}/ps_updater.service
-	${DATASRC}/ps_updater_starter.sh
 	${PYSRC}/confaux.py
 	${PYSRC}/coor.py
 	${PYSRC}/timestamp.py
