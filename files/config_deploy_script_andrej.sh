@@ -2,7 +2,7 @@
 
 Q="\""
 
-SSH_="ssh -p 6623 -o StrictHostKeyChecking=no"
+SSH_="ssh -p 6623 -o StrictHostKeyChecking=no -o ConnectTimeout=10"
 SSH="$SSH_ Andrej@localhost"
 RSYNC="rsync -r --delete --checksum"
 

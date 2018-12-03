@@ -1,4 +1,5 @@
 import flask
+import pathlib
 import subprocess
 import typing
 from timestamp import get_latest_str as timestamp__get_latest_str
@@ -6,9 +7,14 @@ from base64 import b32encode as base__b32encode
 from coor import execself as coor__execself
 from json import loads as json__loads
 from flask import Flask as flask__Flask
+from flask import render_template_string as flask__render_template_string
 from flask import request as flask__request
+from flask import send_from_directory as flask__send_from_directory
 from os import urandom as os__urandom
 from os import environ as os__environ
+from os import makedirs as os__makedirs
+from re import fullmatch as re__fullmatch
+from pathlib import Path as pathlib__Path
 from subprocess import run as subprocess__run
 from urllib.parse import urljoin as urllib_parse__urljoin
 
@@ -20,11 +26,48 @@ def ps_url_for(u):
     else:
         raise RuntimeError()
 
+def write_next(dstdir: pathlib.Path, data: str):
+    os__makedirs(str(dstdir), exist_ok=True)
+    files: typing.List[pathlib.Path] = [x for x in dstdir.iterdir() if x.is_file()]
+    nmbrs: typing.List[int] = [fnameint(x.name) for x in files]
+    snext: str = str(max(nmbrs, default=0) + 1) + '.txt'
+    pnext: pathlib.Path = dstdir / snext
+    with pnext.open(mode='w') as f:
+        f.write(data)
+
+def fnameint(fn: str):
+    return int(re__fullmatch(r'([0-9]+)\.txt', fn).group(1))
+
+@server_app.route("/buildinfo", methods=["GET"])
+def buildinfo():
+    bifdir: pathlib.Path = pathlib__Path(server_app.config['PS']['BUILDINFODIR'])
+    files: typing.List[pathlib.Path] = [x for x in bifdir.iterdir() if x.is_file()]
+    fnams: typing.List[str] = sorted([x.name for x in files], key=fnameint, reverse=True)
+    tvars: dict = { 'fnams': fnams, 'ps_url_for': ps_url_for }
+    return flask__render_template_string('''
+    <ul>
+    {% for f in fnams %}
+      <li><a href="{{ ps_url_for('buildinfo/' + f) }}">{{ f }}</a></li>
+    {% endfor %}
+    </ul>
+    ''',
+    **tvars)
+@server_app.route("/buildinfo/<string:bi>")
+def buildinfo_bi(bi: str):
+    bifdir: str = server_app.config['PS']['BUILDINFODIR']
+    return flask__send_from_directory(bifdir, bi)
+
 @server_app.route("/build", methods=["GET"])
 def build():
+    bifdir: str = server_app.config['PS']['BUILDINFODIR']
     stagedir: str = server_app.config['PS']['STAGEDIR']
     deploy: str = server_app.config['PS']['DEPLOYSCRIPT']
-    subprocess__run([deploy, '--build'], timeout=300, check=True)
+    try:
+        p0: subprocess.CompletedProcess = subprocess__run([deploy, '--build'], timeout=300, check=True, capture_output=True, text=True)
+        p0.check_returncode()
+    except:
+        raise RuntimeError(p0)
+    write_next(pathlib__Path(bifdir), p0.stdout)
     ts: str = timestamp__get_latest_str(stagedir)
     return f'''<p>Timestamp: <b>{ts}</b></p>'''
 
