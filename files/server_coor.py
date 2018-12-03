@@ -111,6 +111,7 @@ def index():
     ts: str = timestamp__get_latest_str(stagedir)
     return f'''
 <p>Timestamp: <b>{ts}</b></p>
+<p><a href="{ps_url_for('buildinfo')}">BuildInfo</a></p>
 <p><a href="{ps_url_for('build')}">Build</a></p>
 <p><a href="{ps_url_for('commit')}">Commit</a></p>
 <p><a href="{ps_url_for('status')}">Status</a></p>
