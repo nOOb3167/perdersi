@@ -21,10 +21,10 @@ from urllib.parse import urljoin as urllib_parse__urljoin
 server_app: flask.Flask = flask__Flask(__name__, static_url_path = "")
 
 def ps_url_for(u):
-    if 'X-Real-ROOT' in flask__request.headers:
+    try:
         return urllib_parse__urljoin(flask__request.headers['X-Real-ROOT'], u)
-    else:
-        raise RuntimeError()
+    except:
+        return urllib_parse__urljoin(f'''http://{server_app.config['PS']['ORIGIN_DOMAIN_APP']}:{server_app.config['PS']['LISTEN_PORT']}''', u)
 
 def write_next(dstdir: pathlib.Path, data: str):
     os__makedirs(str(dstdir), exist_ok=True)
