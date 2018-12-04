@@ -21,10 +21,8 @@ from urllib.parse import urljoin as urllib_parse__urljoin
 server_app: flask.Flask = flask__Flask(__name__, static_url_path = "")
 
 def ps_url_for(u):
-    try:
-        return urllib_parse__urljoin(flask__request.headers['X-Real-ROOT'], u)
-    except:
-        return urllib_parse__urljoin(f'''http://{server_app.config['PS']['ORIGIN_DOMAIN_APP']}:{server_app.config['PS']['LISTEN_PORT']}''', u)
+    try:    return urllib_parse__urljoin(flask__request.headers['X-Real-ROOT'], u)
+    except: return urllib_parse__urljoin(f'''http://{server_app.config['PS']['ORIGIN_DOMAIN_APP']}:{server_app.config['PS']['LISTEN_PORT']}''', u)
 
 def write_next(dstdir: pathlib.Path, data: str):
     os__makedirs(str(dstdir), exist_ok=True)
@@ -42,7 +40,7 @@ def fnameint(fn: str):
 def buildinfo():
     bifdir: pathlib.Path = pathlib__Path(server_app.config['PS']['BUILDINFODIR'])
     files: typing.List[pathlib.Path] = [x for x in bifdir.iterdir() if x.is_file()]
-    fnams: typing.List[str] = sorted([x.name for x in files], key=fnameint, reverse=True)
+    fnams: typing.List[str] = sorted([fnameint(x.name) for x in files], reverse=True)
     tvars: dict = { 'fnams': fnams, 'ps_url_for': ps_url_for }
     return flask__render_template_string('''
     <ul>
@@ -60,7 +58,7 @@ def buildinfo_bi(bi: str):
 @server_app.route("/build", methods=["GET"])
 def build():
     bifdir: str = server_app.config['PS']['BUILDINFODIR']
-    stagedir: str = server_app.config['PS']['STAGEDIR']
+    stgdir: str = server_app.config['PS']['STAGEDIR']
     deploy: str = server_app.config['PS']['DEPLOYSCRIPT']
     try:
         p0: subprocess.CompletedProcess = subprocess__run([deploy, '--build'], timeout=300, check=True, capture_output=True, text=True)
@@ -68,14 +66,14 @@ def build():
     except:
         raise RuntimeError(p0)
     write_next(pathlib__Path(bifdir), p0.stdout)
-    ts: str = timestamp__get_latest_str(stagedir)
+    ts: str = timestamp__get_latest_str(stgdir)
     return f'''<p>Timestamp: <b>{ts}</b></p>'''
 
 @server_app.route("/commit", methods=["GET"])
 def commit():
-    stagedir: str = server_app.config['PS']['STAGEDIR']
-    repodir: str = server_app.config['PS']['REPODIR']
-    coor__execself('refs/heads/master', stagedir, repodir)
+    stgdir: str = server_app.config['PS']['STAGEDIR']
+    rpodir: str = server_app.config['PS']['REPODIR']
+    coor__execself('refs/heads/master', stgdir, rpodir)
     return f'''okay'''
 
 @server_app.route("/status", methods=["GET"])
@@ -107,10 +105,9 @@ def status():
 
 @server_app.route("/", methods=["GET"])
 def index():
-    stagedir: str = server_app.config['PS']['STAGEDIR']
-    ts: str = timestamp__get_latest_str(stagedir)
+    stgdir: str = server_app.config['PS']['STAGEDIR']
     return f'''
-<p>Timestamp: <b>{ts}</b></p>
+<p>Timestamp: <b>{timestamp__get_latest_str(stgdir)}</b></p>
 <p><a href="{ps_url_for('buildinfo')}">BuildInfo</a></p>
 <p><a href="{ps_url_for('build')}">Build</a></p>
 <p><a href="{ps_url_for('commit')}">Commit</a></p>
