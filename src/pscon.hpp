@@ -6,10 +6,10 @@
 #include <stdexcept>
 
 #include <boost/algorithm/string.hpp>
-#include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/regex.hpp>
 
+#include <psasio.hpp>
 #include <psmisc.hpp>
 
 using tcp = ::boost::asio::ip::tcp;
