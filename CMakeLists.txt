@@ -87,15 +87,17 @@ find_package(SFML CONFIG COMPONENTS graphics system window REQUIRED)
 
 set(PS_RCS $<$<STREQUAL:$<CXX_COMPILER_ID>,MSVC>:src/updater.rc>)
 
-add_library(common STATIC src/cruft.h src/cruft.cpp src/miniz/miniz.c ps_config_updater.h)
+add_library(common STATIC src/miniz/miniz.c)
 target_link_libraries(common PUBLIC
 	Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking
 	Threads::Threads LibGit2::LibGit2 $<$<STREQUAL:$<CXX_COMPILER_ID>,MSVC>:winhttp Rpcrt4 crypt32>
 )
-target_compile_definitions(common PUBLIC _CRT_SECURE_NO_WARNINGS)
+target_compile_definitions(common PUBLIC _CRT_SECURE_NO_WARNINGS _WIN32_WINNT=0x0601)
 target_include_directories(common PUBLIC ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/miniz)
 
-add_executable(updater ${PS_RCS} src/updater.cpp src/pscon.hpp src/pscruft.hpp src/psgit.hpp src/psmisc.hpp)
+SET(PS_HDRS src/psasio.hpp src/pscon.hpp src/pscruft.hpp src/psgit.hpp src/psmisc.hpp src/psupdater.hpp ps_config_updater.h)
+
+add_executable(updater ${PS_RCS} src/updater.cpp ${PS_HDRS})
 target_link_libraries(updater PUBLIC common)
 set_target_properties(updater PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<0:>")
 # https://cmake.org/cmake/help/latest/prop_tgt/RUNTIME_OUTPUT_DIRECTORY.html#prop_tgt:RUNTIME_OUTPUT_DIRECTORY
@@ -107,11 +109,11 @@ set_target_properties(updater PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<0:>")
 add_executable(stage2 ${PS_RCS} src/stage2.cpp)
 target_link_libraries(stage2 PUBLIC common sfml-graphics sfml-system sfml-window)
 
-add_executable(tupdater2 ${PS_RCS} src/tupdater.cpp)
+add_executable(tupdater2 ${PS_RCS} src/tupdater.cpp ${PS_HDRS})
 target_link_libraries(tupdater2 PUBLIC common)
 target_compile_definitions(tupdater2 PUBLIC _PS_DEBUG_TUPDATER=2)
 
-add_executable(tupdater3 ${PS_RCS} src/tupdater.cpp)
+add_executable(tupdater3 ${PS_RCS} src/tupdater.cpp ${PS_HDRS})
 target_link_libraries(tupdater3 PUBLIC common)
 target_compile_definitions(tupdater3 PUBLIC _PS_DEBUG_TUPDATER=3)
 

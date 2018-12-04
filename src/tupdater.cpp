@@ -1,10 +1,13 @@
+#include <sdkddkver.h>
 #include <cstdlib>
 #include <stdexcept>
 
 #include <boost/filesystem.hpp>
 #include <boost/regex.hpp>
 
-#include <cruft.h>
+#include <pscruft.hpp>
+
+using namespace ps;
 
 int main(int argc, char **argv)
 {
