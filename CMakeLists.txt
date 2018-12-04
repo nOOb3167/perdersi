@@ -26,32 +26,25 @@ set(PS_ANSIBLE_PLAYBOOK_CMD ansible-playbook CACHE STRING "")
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
 
-if(WIN32)
-	set(SEP "\\;")
-else()
-	set(SEP ":")
-endif()
-set(DATASRC ${CMAKE_SOURCE_DIR}/data/)
-set(PYSRC ${CMAKE_SOURCE_DIR}/files/)
-set(PYPATH "PYTHONPATH=${CMAKE_BINARY_DIR}${SEP}${PYSRC}")
+include(Sep)
 
-configure_file("${CMAKE_SOURCE_DIR}/cmake/marker_remote.in" ps_marker_remote @ONLY)
-configure_file("${PYSRC}/${PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME}.py" ps_config_deploy.py @ONLY)
-configure_file("${PYSRC}/${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py" ps_config_server.py @ONLY)
-configure_file("${PYSRC}/${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py" ps_config_updater.py @ONLY)
+configure_file(${CMAKE_SOURCE_DIR}/cmake/marker_remote.in ps_marker_remote @ONLY)
+configure_file(${CMAKE_SOURCE_DIR}/files/${PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME}.py ps_config_deploy.py @ONLY)
+configure_file(${CMAKE_SOURCE_DIR}/files/${PS_CONFIG_SERVER_PYTHON_MODULE_NAME}.py ps_config_server.py @ONLY)
+configure_file(${CMAKE_SOURCE_DIR}/files/${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py ps_config_updater.py @ONLY)
 
 set(TARFILES
 	${CMAKE_BINARY_DIR}/ps_config_deploy.py
 	${CMAKE_BINARY_DIR}/ps_config_server.py
 	${CMAKE_BINARY_DIR}/ps_config_updater.py
-	${DATASRC}/ps_coor.service
-	${DATASRC}/ps_updater.service
-	${PYSRC}/confaux.py
-	${PYSRC}/coor.py
-	${PYSRC}/timestamp.py
-	${PYSRC}/server.py
-	${PYSRC}/server_coor.py
-	${PYSRC}/startup.py
+	${CMAKE_SOURCE_DIR}/data/ps_coor.service
+	${CMAKE_SOURCE_DIR}/data/ps_updater.service
+	${CMAKE_SOURCE_DIR}/files/confaux.py
+	${CMAKE_SOURCE_DIR}/files/coor.py
+	${CMAKE_SOURCE_DIR}/files/timestamp.py
+	${CMAKE_SOURCE_DIR}/files/server.py
+	${CMAKE_SOURCE_DIR}/files/server_coor.py
+	${CMAKE_SOURCE_DIR}/files/startup.py
 )
 
 add_custom_command(
@@ -67,8 +60,8 @@ add_custom_command(
 add_custom_target(TestsDeployCoor
 	COMMAND
 		${PS_ANSIBLE_PLAYBOOK_CMD}
-			--extra-vars "ps_cmake_binary_dir=${CMAKE_BINARY_DIR}"
-			"${CMAKE_SOURCE_DIR}/ansible/deploy.yml"
+			--extra-vars ps_cmake_binary_dir=${CMAKE_BINARY_DIR}
+			${CMAKE_SOURCE_DIR}/ansible/deploy.yml
 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 	DEPENDS ${CMAKE_BINARY_DIR}/coor.tar.gz
 )
@@ -87,7 +80,7 @@ find_package(SFML CONFIG COMPONENTS graphics system window REQUIRED)
 
 set(PS_RCS $<$<STREQUAL:$<CXX_COMPILER_ID>,MSVC>:src/updater.rc>)
 
-add_library(common STATIC src/miniz/miniz.c)
+add_library(common STATIC src/miniz/miniz.c src/miniz/miniz.h src/psasio.hpp src/pscon.hpp src/pscruft.hpp src/psgit.hpp src/psmisc.hpp src/psupdater.hpp ps_config_updater.h)
 target_link_libraries(common PUBLIC
 	Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking
 	Threads::Threads LibGit2::LibGit2 $<$<STREQUAL:$<CXX_COMPILER_ID>,MSVC>:winhttp Rpcrt4 crypt32>
@@ -95,29 +88,23 @@ target_link_libraries(common PUBLIC
 target_compile_definitions(common PUBLIC _CRT_SECURE_NO_WARNINGS _WIN32_WINNT=0x0601)
 target_include_directories(common PUBLIC ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/miniz)
 
-SET(PS_HDRS src/psasio.hpp src/pscon.hpp src/pscruft.hpp src/psgit.hpp src/psmisc.hpp src/psupdater.hpp ps_config_updater.h)
-
-add_executable(updater ${PS_RCS} src/updater.cpp ${PS_HDRS})
+add_executable(updater ${PS_RCS} src/updater.cpp)
 target_link_libraries(updater PUBLIC common)
-set_target_properties(updater PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<0:>")
-# https://cmake.org/cmake/help/latest/prop_tgt/RUNTIME_OUTPUT_DIRECTORY.html#prop_tgt:RUNTIME_OUTPUT_DIRECTORY
-#   RUNTIME_OUTPUT_DIRECTORY "" or "." means CMAKE_BINARY_DIR
-#   VS etc helpfully "... append a per-configuration subdirectory to the specified directory unless a generator expression is used"
-#     thus landing the binaries into eg CMAKE_BINARY_DIR/Debug
-#   use a no-op generator expression to really land binaries into CMAKE_BINARY_DIR
+set_target_properties(updater PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PS_FORCED_EMPTY_RUNTIME_OUTPUT_DIRECTORY})
 
 add_executable(stage2 ${PS_RCS} src/stage2.cpp)
 target_link_libraries(stage2 PUBLIC common sfml-graphics sfml-system sfml-window)
 
-add_executable(tupdater2 ${PS_RCS} src/tupdater.cpp ${PS_HDRS})
+add_executable(tupdater2 ${PS_RCS} src/tupdater.cpp)
 target_link_libraries(tupdater2 PUBLIC common)
 target_compile_definitions(tupdater2 PUBLIC _PS_DEBUG_TUPDATER=2)
 
-add_executable(tupdater3 ${PS_RCS} src/tupdater.cpp ${PS_HDRS})
+add_executable(tupdater3 ${PS_RCS} src/tupdater.cpp)
 target_link_libraries(tupdater3 PUBLIC common)
 target_compile_definitions(tupdater3 PUBLIC _PS_DEBUG_TUPDATER=3)
 
 find_package(Python3 REQUIRED)
+set(PYPATH "PYTHONPATH=${CMAKE_BINARY_DIR}${SEP}${CMAKE_SOURCE_DIR}/files")
 
 add_custom_command(
 	COMMENT "Generating Config Header (ps_config_updater.h)"
@@ -128,7 +115,7 @@ add_custom_command(
 			--src_mod ${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}
 			--dst ps_config_updater.h
 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-	DEPENDS ${PYSRC}${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py ${PYSRC}genhdr.py
+	DEPENDS ${CMAKE_SOURCE_DIR}/files/${PS_CONFIG_UPDATER_PYTHON_MODULE_NAME}.py ${CMAKE_SOURCE_DIR}/files/genhdr.py
 )
 
 add_custom_target(TestsServerPreload
@@ -154,14 +141,14 @@ add_custom_target(TestsServerRun
 add_custom_target(Tests
 	COMMAND
 		${CMAKE_COMMAND} -E env "${PYPATH}"
-		${Python3_EXECUTABLE} -m pytest ${PYSRC}
+		${Python3_EXECUTABLE} -m pytest ${CMAKE_SOURCE_DIR}/files
 			--cov=. --cov-report term
 			--customopt_debug_wait=${PS_DEBUG_WAIT}
 			--customopt_python_exe=${Python3_EXECUTABLE}
 			--customopt_tupdater2_exe=$<TARGET_FILE:tupdater2>
 			--customopt_tupdater3_exe=$<TARGET_FILE:tupdater3>
 			--customopt_updater_exe=$<TARGET_FILE:updater>
-	WORKING_DIRECTORY ${PYSRC}
+	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/files
 	DEPENDS ps_config_server.py ps_config_updater.py
 )
 
