@@ -95,7 +95,7 @@ target_link_libraries(common PUBLIC
 target_compile_definitions(common PUBLIC _CRT_SECURE_NO_WARNINGS)
 target_include_directories(common PUBLIC ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/miniz)
 
-add_executable(updater ${PS_RCS} src/updater.cpp)
+add_executable(updater ${PS_RCS} src/updater.cpp src/pscon.hpp src/psgit.hpp src/psmisc.hpp)
 target_link_libraries(updater PUBLIC common)
 set_target_properties(updater PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<0:>")
 # https://cmake.org/cmake/help/latest/prop_tgt/RUNTIME_OUTPUT_DIRECTORY.html#prop_tgt:RUNTIME_OUTPUT_DIRECTORY
