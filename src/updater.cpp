@@ -24,11 +24,12 @@ using namespace ps;
 
 int main(int argc, char **argv)
 {
-	if (std::find(argv + 1, argv + argc, "--tryout") != argv + argc)
-		return 123;
-	bool arg_skipselfupdate = std::find(argv + 1, argv + argc, "--skipselfupdate") != argv + argc;
-
 	git_libgit2_init();
+
+	const auto [arg_tryout, arg_skipselfupdate] = updater_argv_parse(argc, argv);
+
+	if (arg_tryout)
+		return 123;
 
 	pt_t config = cruft_config_read();
 	boost::filesystem::path chkoutdir = cruft_config_get_path(config, "REPO_CHK_DIR");
@@ -51,18 +52,10 @@ int main(int argc, char **argv)
 	updater_blobs_get_writing(&client, repo.get(), blobs);
 	ns_git::checkout_obj(repo.get(), head,	chkoutdir.string());
 
-	do {
-		if (arg_skipselfupdate)
-			break;
-		if (!updater_running_exe_content_file_replace_ensure(updater_tree_entry_blob_content(repo.get(), head, updatr), cruft_current_executable_filename()))
-			break;
-
+	if (!arg_skipselfupdate && updater_running_exe_content_file_replace_ensure(updater_tree_entry_blob_content(repo.get(), head, updatr), cruft_current_executable_filename()))
 		cruft_exec_file_lowlevel(cruft_current_executable_filename(), { "--skipselfupdate" }, std::chrono::milliseconds(0));
-
-		return EXIT_SUCCESS;
-	} while (false);
-
-	cruft_exec_file_lowlevel(stage2path.string(), {}, std::chrono::milliseconds(0));
+	else
+		cruft_exec_file_lowlevel(stage2path.string(), {}, std::chrono::milliseconds(0));
 
 	return EXIT_SUCCESS;
 }

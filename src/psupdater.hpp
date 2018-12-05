@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <utility>
 
 #include <boost/filesystem.hpp>
 #include <git2.h>
@@ -166,6 +167,14 @@ updater_running_exe_content_file_replace_ensure(
 	if (cruft_file_read(curexefname) != content)
 		throw std::runtime_error("failed updating");
 	return true;
+}
+
+inline std::pair<bool, bool>
+updater_argv_parse(int argc, char **argv)
+{
+	return std::make_pair(
+		std::find(argv + 1, argv + argc, "--tryout") != argv + argc,
+		std::find(argv + 1, argv + argc, "--skipselfupdate") != argv + argc);
 }
 
 }

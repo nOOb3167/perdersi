@@ -1,6 +1,7 @@
 #ifndef _PSCON_HPP_
 #define _PSCON_HPP_
 
+#include <mutex>
 #include <string>
 #include <vector>
 #include <stdexcept>
@@ -95,7 +96,8 @@ class PsConTest : public PsCon
 {
 public:
 	inline PsConTest(const std::string &host, const std::string &port, const std::string &host_http_rootpath) :
-		PsCon(host, port, host_http_rootpath)
+		PsCon(host, port, host_http_rootpath),
+		m_mtx()
 	{};
 
 	inline res_t reqPost_(const std::string &path, const std::string &data) override
@@ -106,6 +108,7 @@ public:
 		return PsCon::reqPost_(path, data);
 	}
 
+	std::mutex m_mtx;
 	std::vector<shahex_t> m_objects_requested;
 };
 
