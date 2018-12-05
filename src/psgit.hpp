@@ -5,6 +5,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <boost/regex.hpp>
 #include <git2.h>
@@ -206,6 +207,15 @@ tree_lookup(git_repository *repo, const git_oid oid)
 	if (!!git_tree_lookup(&p, repo, &oid))
 		throw std::runtime_error("tree lookup");
 	return unique_ptr_gittree(p, tree_delete);
+}
+
+inline std::vector<unique_ptr_gittree>
+tree_lookup_v(git_repository *repo, const std::vector<shahex_t> &oids)
+{
+	std::vector<unique_ptr_gittree> trees;
+	for (const auto &a : oids)
+		trees.push_back(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(a)));
+	return trees;
 }
 
 inline unique_ptr_gitrepository

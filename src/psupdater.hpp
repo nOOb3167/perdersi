@@ -15,14 +15,14 @@
 namespace ps
 {
 
-std::string
+inline std::string
 updater_object_get(PsCon *client, const shahex_t &obj)
 {
 	std::string loose = client->reqPost_("/objects/" + obj.substr(0, 2) + "/" + obj.substr(2), "").body();
 	return loose;
 }
 
-shahex_t
+inline shahex_t
 updater_head_get(PsCon *client, const std::string &refname)
 {
 	shahex_t objhex = client->reqPost_("/refs/heads/" + refname, "").body();
@@ -33,7 +33,7 @@ updater_head_get(PsCon *client, const std::string &refname)
 	return objhex;
 }
 
-void
+inline void
 updater_object_get_write_raw(git_repository *repo, const shahex_t &obj, const std::string &incoming_loose)
 {
 	if (!ns_git::hexstr_equals(obj, ns_git::get_object_data_hexstr(ns_git::inflatebuf(incoming_loose))))
@@ -43,7 +43,7 @@ updater_object_get_write_raw(git_repository *repo, const shahex_t &obj, const st
 	cruft_file_write_moving(".git", objectpath, incoming_loose);
 }
 
-void
+inline void
 updater_object_get_write_raw_ifnotexist(PsCon *client, git_repository *repo, const shahex_t &obj)
 {
 	unique_ptr_gitodb odb(ns_git::odb_from_repo(repo));
@@ -53,8 +53,8 @@ updater_object_get_write_raw_ifnotexist(PsCon *client, git_repository *repo, con
 	updater_object_get_write_raw(repo, obj, updater_object_get(client, obj));
 }
 
-std::vector<shahex_t>
-updater_trees_get_writing(PsCon *client, git_repository *repo, const shahex_t &tree)
+inline std::vector<shahex_t>
+updater_trees_get_writing_recursive(PsCon *client, git_repository *repo, const shahex_t &tree)
 {
 	std::vector<shahex_t> out;
 
@@ -65,32 +65,32 @@ updater_trees_get_writing(PsCon *client, git_repository *repo, const shahex_t &t
 	unique_ptr_gittree t(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)));
 	for (size_t i = 0; i < git_tree_entrycount(t.get()); ++i)
 		if (git_tree_entry_filemode(git_tree_entry_byindex(t.get(), i)) == GIT_FILEMODE_TREE)
-			for (const auto &elt : updater_trees_get_writing(client, repo, ns_git::hexstr_from_oid(*git_tree_entry_id(git_tree_entry_byindex(t.get(), i)))))
+			for (const auto &elt : updater_trees_get_writing_recursive(client, repo, ns_git::hexstr_from_oid(*git_tree_entry_id(git_tree_entry_byindex(t.get(), i)))))
 				out.push_back(elt);
 	return out;
 }
 
-std::vector<shahex_t>
-updater_blobs_get_writing(PsCon *client, git_repository *repo, const std::vector<shahex_t> &trees)
+inline void
+updater_blobs_get_writing(PsCon *client, git_repository *repo, const std::vector<shahex_t> &blobs)
+{
+	for (const auto &blob : blobs)
+		updater_object_get_write_raw_ifnotexist(client, repo, blob);
+}
+
+inline std::vector<shahex_t>
+updater_blobs_list(git_repository *repo, const std::vector<shahex_t> &trees)
 {
 	std::vector<shahex_t> blobs;
 
-	std::vector<unique_ptr_gittree> trees_;
-	for (const auto &t : trees)
-		trees_.push_back(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(t)));
-
-	for (const auto &t : trees_)
+	for (const auto &t : ns_git::tree_lookup_v(repo, trees))
 		for (size_t i = 0; i < git_tree_entrycount(t.get()); ++i)
 			if (ns_git::tree_entry_filemode_bloblike_is(t.get(), i))
 				blobs.push_back(ns_git::hexstr_from_oid(*git_tree_entry_id(git_tree_entry_byindex(t.get(), i))));
 
-	for (const auto &blob : blobs)
-		updater_object_get_write_raw_ifnotexist(client, repo, blob);
-
 	return blobs;
 }
 
-unique_ptr_gitblob
+inline unique_ptr_gitblob
 updater_tree_entry_blob(git_repository *repo, const shahex_t &tree, const std::string &entry)
 {
 	unique_ptr_gittree t(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)));
@@ -100,7 +100,7 @@ updater_tree_entry_blob(git_repository *repo, const shahex_t &tree, const std::s
 	return ns_git::blob_lookup(repo, *git_tree_entry_id(e));
 }
 
-std::string
+inline std::string
 updater_tree_entry_blob_content(git_repository *repo, const shahex_t &tree, const std::string &entry)
 {
 	unique_ptr_gitblob b(updater_tree_entry_blob(repo, tree, entry));
@@ -108,7 +108,7 @@ updater_tree_entry_blob_content(git_repository *repo, const shahex_t &tree, cons
 	return content;
 }
 
-shahex_t
+inline shahex_t
 updater_commit_create(git_repository *repo, const shahex_t &tree)
 {
 	unique_ptr_gitodb odb(ns_git::odb_from_repo(repo));
@@ -128,7 +128,7 @@ updater_commit_create(git_repository *repo, const shahex_t &tree)
 	return ns_git::hexstr_from_oid(commit_oid_even_if_error);
 }
 
-void
+inline void
 updater_ref_create(git_repository *repo, const std::string &refname, const git_oid commit)
 {
 	git_reference *ref = NULL;
@@ -137,7 +137,7 @@ updater_ref_create(git_repository *repo, const std::string &refname, const git_o
 	git_reference_free(ref);
 }
 
-boost::filesystem::path
+inline boost::filesystem::path
 updater_running_exe_content_file_replace_prepare(
 	const std::string &content,
 	const std::string &curexefname)
@@ -150,7 +150,7 @@ updater_running_exe_content_file_replace_prepare(
 	return tryout_exe_path;
 }
 
-bool
+inline bool
 updater_running_exe_content_file_replace_ensure(
 	const std::string &content,
 	const std::string &curexefname

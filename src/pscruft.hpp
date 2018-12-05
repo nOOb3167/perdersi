@@ -20,7 +20,7 @@ using pt_t = ::boost::property_tree::ptree;
 namespace ps
 {
 
-std::string
+inline std::string
 cruft_current_executable_filename()
 {
 	std::string fname(1024, '\0');
@@ -37,7 +37,7 @@ cruft_current_executable_filename()
 // https://docs.microsoft.com/en-us/windows/desktop/api/winbase/nf-winbase-movefileexa
 //    If the destination is on another drive, you must set the MOVEFILE_COPY_ALLOWED flag in dwFlags.
 //    Interdrive move attempt causes copy which is unable to displace a/the running executable.
-void
+inline void
 cruft_rename_file_file(
 	const std::string &src_filename,
 	const std::string &dst_filename)
@@ -46,7 +46,7 @@ cruft_rename_file_file(
 		throw std::runtime_error("rename");
 }
 
-void
+inline void
 cruft_rename_file_over_running_exe(
 	const std::string &src_filename,
 	const std::string &dst_filename)
@@ -57,7 +57,7 @@ cruft_rename_file_over_running_exe(
 	cruft_rename_file_file(src_filename, dst_filename);
 }
 
-int
+inline int
 cruft_exec_file_lowlevel(
 	const std::string &exec_filename,
 	const std::vector<std::string> &args,
@@ -89,14 +89,14 @@ cruft_exec_file_lowlevel(
 	return exitcode;
 }
 
-void
+inline void
 cruft_exec_file_expecting(const std::string &exec_filename, int ret_expected)
 {
 	if (cruft_exec_file_lowlevel(exec_filename, {}, std::chrono::milliseconds(0xFFFFFFFF)) != ret_expected)
 		throw std::runtime_error("process exec code check");
 }
 
-void
+inline void
 cruft_exec_file_checking_retcode(
 	const std::string &exec_filename,
 	const std::string &arg_opt,
@@ -107,7 +107,7 @@ cruft_exec_file_checking_retcode(
 		throw std::runtime_error("process exec code check");
 }
 
-void
+inline void
 cruft_debug_wait()
 {
 	MessageBoxA(NULL, "Attach Debugger", cruft_current_executable_filename().c_str(), MB_OK);
@@ -115,7 +115,7 @@ cruft_debug_wait()
 		__debugbreak();
 }
 
-boost::property_tree::ptree
+inline boost::property_tree::ptree
 cruft_config_read()
 {
 	std::stringstream ss(getenv("PS_CONFIG") ? getenv("PS_CONFIG") : std::string(g_ps_config, sizeof g_ps_config));
@@ -129,7 +129,7 @@ cruft_config_read()
 	return pt;
 }
 
-boost::filesystem::path
+inline boost::filesystem::path
 cruft_config_get_path(
 	const boost::property_tree::ptree &config,
 	const char *entryname)
@@ -141,7 +141,7 @@ cruft_config_get_path(
 		return boost::filesystem::path(cruft_current_executable_filename()).parent_path() / path;
 }
 
-void
+inline void
 cruft_file_write_moving(const std::string &finalpathdir_creation_lump_check, const boost::filesystem::path &finalpath, const std::string &content)
 {
 	/* prepare final */
@@ -168,7 +168,7 @@ cruft_file_write_moving(const std::string &finalpathdir_creation_lump_check, con
 	cruft_rename_file_file(temppath.string(), finalpath.string());
 }
 
-std::string
+inline std::string
 cruft_file_read(const boost::filesystem::path &path)
 {
 	std::ifstream ff(path.string().c_str(), std::ios::in | std::ios::binary);

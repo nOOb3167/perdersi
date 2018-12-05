@@ -46,8 +46,9 @@ int main(int argc, char **argv)
 	std::cout << "updatr: " << updatr << std::endl;
 	std::cout << "head: " << head << std::endl;
 
-	std::vector<shahex_t> trees = updater_trees_get_writing(&client, repo.get(), head);
-	std::vector<shahex_t> blobs = updater_blobs_get_writing(&client, repo.get(), trees);
+	std::vector<shahex_t> trees = updater_trees_get_writing_recursive(&client, repo.get(), head);
+	std::vector<shahex_t> blobs = updater_blobs_list(repo.get(), trees);
+	updater_blobs_get_writing(&client, repo.get(), blobs);
 	ns_git::checkout_obj(repo.get(), head,	chkoutdir.string());
 
 	do {
