@@ -101,7 +101,7 @@ public:
 	inline res_t reqPost_(const std::string &path, const std::string &data) override
 	{
 		boost::cmatch what;
-		if (boost::regex_search(path.c_str(), what, boost::regex("/objects/([[:xdigit:]]{2})/([[:xdigit:]]{38})"), boost::match_continuous))
+		if (boost::regex_search(path.c_str(), what, boost::regex("/objects/([[:xdigit:]]{2})/([[:xdigit:]]{38})"), boost::match_default))
 			m_objects_requested.push_back(boost::algorithm::to_lower_copy(what[1].str() + what[2].str()));
 		return PsCon::reqPost_(path, data);
 	}
