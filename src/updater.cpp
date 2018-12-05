@@ -37,7 +37,7 @@ int main(int argc, char **argv)
 
 	unique_ptr_gitrepository repo(ns_git::repository_ensure(config.get<std::string>("REPO_DIR")));
 
-	PsConTest client(config.get<std::string>("ORIGIN_DOMAIN_API"), config.get<std::string>("LISTEN_PORT"));
+	PsConTest client(config.get<std::string>("ORIGIN_DOMAIN_API"), config.get<std::string>("LISTEN_PORT"), "");
 	shahex_t head = updater_head_get(&client, "master");
 
 	std::cout << "repodir: " << git_repository_path(repo.get()) << std::endl;

@@ -75,15 +75,14 @@ updater_blobs_get_writing(PsCon *client, git_repository *repo, const std::vector
 {
 	std::vector<shahex_t> blobs;
 
-	for (const auto &elt : trees) {
-		unique_ptr_gittree t(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(elt)));
+	std::vector<unique_ptr_gittree> trees_;
+	for (const auto &t : trees)
+		trees_.push_back(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(t)));
+
+	for (const auto &t : trees_)
 		for (size_t i = 0; i < git_tree_entrycount(t.get()); ++i)
-			if (git_tree_entry_filemode(git_tree_entry_byindex(t.get(), i)) == GIT_FILEMODE_BLOB ||
-				git_tree_entry_filemode(git_tree_entry_byindex(t.get(), i)) == GIT_FILEMODE_BLOB_EXECUTABLE)
-			{
+			if (ns_git::tree_entry_filemode_bloblike_is(t.get(), i))
 				blobs.push_back(ns_git::hexstr_from_oid(*git_tree_entry_id(git_tree_entry_byindex(t.get(), i))));
-			}
-	}
 
 	for (const auto &blob : blobs)
 		updater_object_get_write_raw_ifnotexist(client, repo, blob);

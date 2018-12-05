@@ -28,10 +28,11 @@ public:
 class PsCon
 {
 public:
-	inline PsCon(const std::string &host, const std::string &port) :
+	inline PsCon(const std::string &host, const std::string &port, const std::string &host_http_rootpath) :
 		m_host(host),
 		m_port(port),
 		m_host_http(host + ":" + port),
+		m_host_http_rootpath(host_http_rootpath),
 		m_ioc(),
 		m_resolver(m_ioc),
 		m_resolver_r(m_resolver.resolve(host, port)),
@@ -53,7 +54,7 @@ public:
 
 	inline res_t reqPost(const std::string &path, const std::string &data)
 	{
-		http::request<http::string_body> req(http::verb::post, path, 11);
+		http::request<http::string_body> req(http::verb::post, m_host_http_rootpath + path, 11);
 		req.set(http::field::host, m_host_http);
 		req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 		http::write(*m_socket, req);
@@ -83,6 +84,7 @@ public:
 	std::string m_host;
 	std::string m_port;
 	std::string m_host_http;
+	std::string m_host_http_rootpath;
 	boost::asio::io_context m_ioc;
 	tcp::resolver m_resolver;
 	tcp::resolver::results_type m_resolver_r;
@@ -92,8 +94,8 @@ public:
 class PsConTest : public PsCon
 {
 public:
-	inline PsConTest(const std::string &host, const std::string &port) :
-		PsCon(host, port)
+	inline PsConTest(const std::string &host, const std::string &port, const std::string &host_http_rootpath) :
+		PsCon(host, port, host_http_rootpath)
 	{};
 
 	inline res_t reqPost_(const std::string &path, const std::string &data) override

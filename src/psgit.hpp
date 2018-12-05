@@ -140,6 +140,13 @@ get_object_data_hexstr(const std::string &incoming_data)
 	return hexstr_from_oid(oid_loose);
 }
 
+inline bool
+tree_entry_filemode_bloblike_is(git_tree *t, size_t i)
+{
+	return (git_tree_entry_filemode(git_tree_entry_byindex(t, i)) == GIT_FILEMODE_BLOB ||
+			git_tree_entry_filemode(git_tree_entry_byindex(t, i)) == GIT_FILEMODE_BLOB_EXECUTABLE);
+}
+
 inline void blob_delete(git_blob *p) { if (p) git_blob_free(p); }
 inline void commit_delete(git_commit *p) { if (p) git_commit_free(p); }
 inline void odb_delete(git_odb *p) { if (p) git_odb_free(p); }
