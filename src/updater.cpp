@@ -1,3 +1,4 @@
+#include <cassert>
 #include <cstdlib>
 #include <exception>
 #include <mutex>
@@ -21,7 +22,10 @@ class PsThr
 {
 public:
 	PsThr(const pt_t &config, PsConTest *client) :
+		m_mtx(),
 		m_thr(),
+		m_exc(),
+		m_dead(false),
 		m_config(config),
 		m_client(client)
 	{}
@@ -34,8 +38,15 @@ public:
 	void join()
 	{
 		m_thr.join();
+		assert(m_dead);
 		if (m_exc)
 			std::rethrow_exception(m_exc);
+	}
+
+	bool isdead()
+	{
+		std::lock_guard<std::mutex> l(m_mtx);
+		return m_dead;
 	}
 
 	void tfunc()
@@ -45,6 +56,8 @@ public:
 		} catch (std::exception &) {
 			m_exc = std::current_exception();
 		}
+		std::lock_guard<std::mutex> l(m_mtx);
+		m_dead = true;
 	}
 
 	void run()
@@ -71,8 +84,10 @@ public:
 		updater_replace_cond(m_config.get<int>("ARG_SKIPSELFUPDATE"), repo.get(), head, updatr, cruft_current_executable_filename(), stage2path);
 	}
 
+	std::mutex m_mtx;
 	std::thread m_thr;
 	std::exception_ptr m_exc;
+	bool m_dead;
 	pt_t m_config;
 	PsConTest *m_client;
 };
@@ -92,6 +107,19 @@ int main(int argc, char **argv)
 	sp<PsConTest> client(new PsConTest(config.get<std::string>("ORIGIN_DOMAIN_API"), config.get<std::string>("LISTEN_PORT"), ""));
 	PsThr thr(config, client.get());
 	thr.start();
+
+	sf::Window window(sf::VideoMode(800, 600), "perder.si");
+
+	while (window.isOpen()) {
+		sf::Event event;
+		while (window.pollEvent(event)) {
+			if (event.type == sf::Event::Closed)
+				window.close();
+		}
+		if (thr.isdead())
+			window.close();
+	}
+
 	thr.join();
 
 	return EXIT_SUCCESS;
