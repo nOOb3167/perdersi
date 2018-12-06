@@ -2,6 +2,7 @@
 #define _PS_CRUFT_HPP_
 
 #include <fstream>
+#include <iostream>
 #include <sstream>
 #include <string>
 #include <stdexcept>

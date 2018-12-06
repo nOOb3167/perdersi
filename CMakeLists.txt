@@ -92,7 +92,7 @@ target_include_directories(common PUBLIC ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}
 set_target_properties(common PROPERTIES CXX_STANDARD 17)
 
 add_executable(updater ${PS_RCS} src/updater.cpp)
-target_link_libraries(updater PUBLIC common)
+target_link_libraries(updater PUBLIC common sfml-graphics sfml-system sfml-window)
 set_target_properties(updater PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PS_FORCED_EMPTY_RUNTIME_OUTPUT_DIRECTORY})
 
 add_executable(stage2 ${PS_RCS} src/stage2.cpp)

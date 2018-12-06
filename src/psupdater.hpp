@@ -1,6 +1,7 @@
 #ifndef _PSUPDATER_HPP_
 #define _PSUPDATER_HPP_
 
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <utility>
@@ -175,6 +176,21 @@ updater_argv_parse(int argc, char **argv)
 	return std::make_pair(
 		std::find(argv + 1, argv + argc, "--tryout") != argv + argc,
 		std::find(argv + 1, argv + argc, "--skipselfupdate") != argv + argc);
+}
+
+inline void
+updater_replace_cond(
+	bool arg_skipselfupdate,
+	git_repository *repo,
+	const shahex_t &head,
+	const std::string &updatr,
+	const std::string &curexefname,
+	const boost::filesystem::path &stage2path)
+{
+	if (!arg_skipselfupdate && updater_running_exe_content_file_replace_ensure(updater_tree_entry_blob_content(repo, head, updatr), curexefname))
+		cruft_exec_file_lowlevel(cruft_current_executable_filename(), { "--skipselfupdate" }, std::chrono::milliseconds(0));
+	else
+		cruft_exec_file_lowlevel(stage2path.string(), {}, std::chrono::milliseconds(0));
 }
 
 }
