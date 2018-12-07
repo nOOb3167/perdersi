@@ -119,7 +119,7 @@ cruft_debug_wait()
 inline boost::property_tree::ptree
 cruft_config_read()
 {
-	std::stringstream ss(getenv("PS_CONFIG") ? getenv("PS_CONFIG") : std::string(g_ps_config, sizeof g_ps_config));
+	std::stringstream ss(getenv("PS_CONFIG") ? getenv("PS_CONFIG") : std::string(g_ps_config_updater, sizeof g_ps_config_updater));
 
 	boost::property_tree::ptree pt;
 	boost::property_tree::json_parser::read_json(ss, pt);

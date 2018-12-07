@@ -17,9 +17,10 @@ import types
 def err():
     raise RuntimeError();
 
-def make_hdr(byt: bytes):
+def make_hdr(nam: str, byt: bytes):
     hex: str = byt.hex()
-    return 'char g_ps_config[] = { ' + ''.join(['0x' + hex[2*i] + hex[2*i+1] + ", " for i in range(len(hex) // 2)]) + '};\n'
+    chex: str = ''.join(['0x' + hex[2*i] + hex[2*i+1] + ', ' for i in range(len(hex) // 2)])
+    return f'char g_{nam}[] = {{ {chex} }};\n'
 
 def mod(src_mod: str):
     # import src_mod and attempt to retrieve its config attribute as json
@@ -47,8 +48,9 @@ def run():
           err()
     # write dst
     dst: pathlib.Path = pathlib.Path(args.dst[0])
+    nam: str = dst.stem
     with dst.open(mode='w', newline='\n') as f:
-        f.write(make_hdr(byt))
+        f.write(make_hdr(nam, byt))
 
 if __name__ == '__main__':
     run()
