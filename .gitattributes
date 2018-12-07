@@ -1,1 +1,2 @@
 *.sh eol=lf
+*.svg eol=lf

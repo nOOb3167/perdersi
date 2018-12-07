@@ -1,0 +1,6 @@
+find_program(INKSCAPE_EXECUTABLE inkscape)
+
+include(FindPackageHandleStandardArgs)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(Inkscape DEFAULT_MSG INKSCAPE_EXECUTABLE)
+
+mark_as_advanced(INKSCAPE_EXECUTABLE)

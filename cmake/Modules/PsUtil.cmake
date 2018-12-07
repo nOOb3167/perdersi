@@ -24,3 +24,14 @@ function(PS_UTIL_GENERATE_HEADER FNAME HDRNAME)
         DEPENDS ${FNAME} ${CMAKE_SOURCE_DIR}/files/genhdr.py
     )
 endfunction()
+
+function(PS_UTIL_CONVERT_SVG_PNG FNAME PNGNAME)
+    add_custom_command(
+        COMMENT "Converting SVG to PNG (${FNAME})"
+        OUTPUT ${PNGNAME}
+        COMMAND
+            ${INKSCAPE_EXECUTABLE} --file=${FNAME} --export-png=${PNGNAME}
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        DEPENDS ${FNAME}
+    )
+endfunction()
