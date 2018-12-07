@@ -26,7 +26,7 @@ set(PS_ANSIBLE_PLAYBOOK_CMD ansible-playbook CACHE STRING "")
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
 
-include(Sep)
+include(PsUtil)
 
 configure_file(${CMAKE_SOURCE_DIR}/cmake/marker_remote.in ps_marker_remote @ONLY)
 configure_file(${CMAKE_SOURCE_DIR}/files/${PS_CONFIG_DEPLOY_PYTHON_MODULE_NAME}.py ps_config_deploy.py @ONLY)
@@ -82,7 +82,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(PS_RCS $<$<STREQUAL:$<CXX_COMPILER_ID>,MSVC>:src/updater.rc>)
 
-add_library(common STATIC src/miniz/miniz.c src/miniz/miniz.h src/psasio.hpp src/pscon.hpp src/pscruft.hpp src/psgit.hpp src/psmisc.hpp src/psupdater.hpp ps_config_updater.h)
+add_library(common STATIC src/miniz/miniz.c src/miniz/miniz.h src/psasio.hpp src/pscon.hpp src/pscruft.hpp src/psgit.hpp src/psmisc.hpp src/psupdater.hpp ps_config_updater.h ps_data_dummy.h)
 target_link_libraries(common PUBLIC
 	Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking
 	Threads::Threads LibGit2::LibGit2 $<$<STREQUAL:$<CXX_COMPILER_ID>,MSVC>:winhttp Rpcrt4 crypt32>
@@ -108,6 +108,8 @@ target_compile_definitions(tupdater3 PUBLIC _PS_DEBUG_TUPDATER=3)
 
 find_package(Python3 REQUIRED)
 set(PYPATH "PYTHONPATH=${CMAKE_BINARY_DIR}${SEP}${CMAKE_SOURCE_DIR}/files")
+
+PS_UTIL_GENERATE_HEADER(${CMAKE_SOURCE_DIR}/files/server.py ps_data_dummy.h)
 
 add_custom_command(
 	COMMENT "Generating Config Header (ps_config_updater.h)"

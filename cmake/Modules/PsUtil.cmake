@@ -10,3 +10,17 @@ endif()
 #     thus landing the binaries into eg CMAKE_BINARY_DIR/Debug
 #   use a no-op generator expression to really land binaries into CMAKE_BINARY_DIR
 set(PS_FORCED_EMPTY_RUNTIME_OUTPUT_DIRECTORY "$<0:>")
+
+function(PS_UTIL_GENERATE_HEADER FNAME HDRNAME)
+    add_custom_command(
+        COMMENT "Generating Data Header (${HDRNAME})"
+        OUTPUT ${HDRNAME}
+        COMMAND
+            ${CMAKE_COMMAND} -E env "${PYPATH}"
+            ${Python3_EXECUTABLE} -m genhdr
+                --src_pth ${FNAME}
+                --dst ${HDRNAME}
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        DEPENDS ${FNAME} ${CMAKE_SOURCE_DIR}/files/genhdr.py
+    )
+endfunction()
