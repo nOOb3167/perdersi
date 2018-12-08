@@ -36,6 +36,20 @@ public:
 		m_client(client)
 	{}
 
+	~PsThr()
+	{
+		// FIXME: side-effecting destructor
+		if (m_thr.joinable())
+			m_thr.join();	
+	}
+
+	static up<PsThr> create(const pt_t &config, PsConTest *client)
+	{
+		up<PsThr> r(new PsThr(config, client));
+		r->start();
+		return r;
+	}
+
 	void start()
 	{
 		m_thr = std::thread(std::bind(&PsThr::tfunc, this));
@@ -138,8 +152,7 @@ int main(int argc, char **argv)
 	config.put("ARG_SKIPSELFUPDATE", (int)arg_skipselfupdate);
 
 	sp<PsConTest> client(new PsConTest(config.get<std::string>("ORIGIN_DOMAIN_API"), config.get<std::string>("LISTEN_PORT"), ""));
-	PsThr thr(config, client.get());
-	thr.start();
+	sp<PsThr> thr(PsThr::create(config, client.get()));
 
 	sf::RenderWindow window(sf::VideoMode(800, 600), "perder.si");
 	window.setFramerateLimit(60);
@@ -152,14 +165,12 @@ int main(int argc, char **argv)
 			if (event.type == sf::Event::Closed)
 				window.close();
 		}
-		if (thr.isdead())
+		if (thr->isdead())
 			window.close();
 		window.clear(sf::Color(255, 255, 0));
 		tex->draw(window, "g_ps_data_test00");
 		window.display();
 	}
-
-	thr.join();
 
 	return EXIT_SUCCESS;
 }
