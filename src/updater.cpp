@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <exception>
+#include <map>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -9,12 +10,17 @@
 #include <boost/filesystem.hpp>
 #include <git2.h>
 #include <SFML/Window.hpp>
+#include <SFML/Graphics.hpp>
 
 #include <pscruft.hpp>
 #include <psmisc.hpp>
 #include <pscon.hpp>
 #include <psgit.hpp>
 #include <psupdater.hpp>
+#include <ps_data_test00.h>
+
+#define PS_TEX_MKTEX_(VARNAME) (PsTex::_mktex((VARNAME), sizeof (VARNAME)))
+#define PS_TEX_MKTEX(VARNAME) (m_tex[#VARNAME] = PS_TEX_MKTEX_(VARNAME))
 
 using namespace ps;
 
@@ -92,6 +98,33 @@ public:
 	PsConTest *m_client;
 };
 
+class PsTex
+{
+public:
+	PsTex() :
+		m_tex()
+	{
+		PS_TEX_MKTEX(g_ps_data_test00);
+	}
+
+	static sp<sf::Texture> _mktex(uint8_t *data, size_t size)
+	{
+		sp<sf::Texture> tex(new sf::Texture());
+		tex->loadFromMemory(data, size);
+		return tex;
+	}
+
+	void draw(sf::RenderWindow &window, const std::string &name, const sf::Vector2f &pos = sf::Vector2f(0, 0))
+	{
+		assert(m_tex.find(name) != m_tex.end());
+		sf::Sprite spr(*m_tex[name]);
+		spr.move(pos);
+		window.draw(spr);
+	}
+
+	std::map<std::string, sp<sf::Texture> > m_tex;
+};
+
 int main(int argc, char **argv)
 {
 	git_libgit2_init();
@@ -108,7 +141,10 @@ int main(int argc, char **argv)
 	PsThr thr(config, client.get());
 	thr.start();
 
-	sf::Window window(sf::VideoMode(800, 600), "perder.si");
+	sf::RenderWindow window(sf::VideoMode(800, 600), "perder.si");
+	window.setFramerateLimit(60);
+
+	sp<PsTex> tex(new PsTex());
 
 	while (window.isOpen()) {
 		sf::Event event;
@@ -118,6 +154,9 @@ int main(int argc, char **argv)
 		}
 		if (thr.isdead())
 			window.close();
+		window.clear(sf::Color(255, 255, 0));
+		tex->draw(window, "g_ps_data_test00");
+		window.display();
 	}
 
 	thr.join();
