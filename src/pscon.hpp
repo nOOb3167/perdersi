@@ -8,9 +8,11 @@
 
 #include <boost/algorithm/string.hpp>
 #include <boost/beast.hpp>
+#include <boost/filesystem.hpp>
 #include <boost/regex.hpp>
 
 #include <psasio.hpp>
+#include <pscruft.hpp>
 #include <psmisc.hpp>
 
 using tcp = ::boost::asio::ip::tcp;
@@ -29,7 +31,30 @@ public:
 class PsCon
 {
 public:
-	inline PsCon(const std::string &host, const std::string &port, const std::string &host_http_rootpath) :
+	inline virtual ~PsCon() {};
+	inline virtual res_t reqPost(const std::string &path, const std::string &data) = 0;
+	inline virtual void onRequest(const std::string &path, const std::string &data) {};
+};
+
+class PsConTest : public virtual PsCon
+{
+public:
+	inline virtual void onRequest(const std::string &path, const std::string &data) override
+	{
+		boost::cmatch what;
+		if (boost::regex_search(path.c_str(), what, boost::regex("/objects/([[:xdigit:]]{2})/([[:xdigit:]]{38})"), boost::match_default))
+			m_objects_requested.push_back(boost::algorithm::to_lower_copy(what[1].str() + what[2].str()));
+	}
+
+	std::mutex m_mtx;
+	std::vector<shahex_t> m_objects_requested;
+};
+
+class PsConNet : public virtual PsCon, public virtual PsConTest
+{
+public:
+	inline PsConNet(const std::string &host, const std::string &port, const std::string &host_http_rootpath) :
+		PsCon(),
 		m_host(host),
 		m_port(port),
 		m_host_http(host + ":" + port),
@@ -42,7 +67,7 @@ public:
 		boost::asio::connect(*m_socket, m_resolver_r.begin(), m_resolver_r.end());
 	};
 
-	inline ~PsCon()
+	inline ~PsConNet()
 	{
 		m_socket->shutdown(tcp::socket::shutdown_both);
 	}
@@ -53,8 +78,9 @@ public:
 		boost::asio::connect(*m_socket, m_resolver_r.begin(), m_resolver_r.end());
 	}
 
-	inline res_t reqPost(const std::string &path, const std::string &data)
+	inline res_t reqPost_(const std::string &path, const std::string &data)
 	{
+		onRequest(path, data);
 		http::request<http::string_body> req(http::verb::post, m_host_http_rootpath + path, 11);
 		req.set(http::field::host, m_host_http);
 		req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
@@ -74,7 +100,7 @@ public:
 		return res;
 	}
 
-	inline virtual res_t reqPost_(const std::string &path, const std::string &data)
+	inline virtual res_t reqPost(const std::string &path, const std::string &data) override
 	{
 		res_t res = reqPost(path, data);
 		if (res.result_int() != 200)
@@ -92,24 +118,37 @@ public:
 	sp<tcp::socket> m_socket;
 };
 
-class PsConTest : public PsCon
+class PsConFs : public virtual PsCon, public virtual PsConTest
 {
 public:
-	inline PsConTest(const std::string &host, const std::string &port, const std::string &host_http_rootpath) :
-		PsCon(host, port, host_http_rootpath),
-		m_mtx()
-	{};
-
-	inline res_t reqPost_(const std::string &path, const std::string &data) override
+	inline PsConFs(const std::string &gitdir) :
+		PsCon(),
+		m_gitdir(gitdir),
+		m_objdir(m_gitdir / "objects"),
+		m_refdir(m_gitdir / "refs")
 	{
-		boost::cmatch what;
-		if (boost::regex_search(path.c_str(), what, boost::regex("/objects/([[:xdigit:]]{2})/([[:xdigit:]]{38})"), boost::match_default))
-			m_objects_requested.push_back(boost::algorithm::to_lower_copy(what[1].str() + what[2].str()));
-		return PsCon::reqPost_(path, data);
+		if (!boost::filesystem::exists(m_gitdir) ||
+			!boost::filesystem::exists(m_objdir) ||
+			!boost::filesystem::exists(m_refdir))
+		{
+			throw PsConExc();
+		}
+	};
+
+	inline ~PsConFs()
+	{
 	}
 
-	std::mutex m_mtx;
-	std::vector<shahex_t> m_objects_requested;
+	inline virtual res_t reqPost(const std::string &path, const std::string &data) override
+	{
+		std::string content = ps::cruft_file_read(m_gitdir / path);
+		res_t res(boost::beast::http::status::ok, 11, content);
+		return res;
+	}
+
+	boost::filesystem::path m_gitdir;
+	boost::filesystem::path m_objdir;
+	boost::filesystem::path m_refdir;
 };
 
 #endif /* _PSCON_HPP_ */

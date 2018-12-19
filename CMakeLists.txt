@@ -84,21 +84,22 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(PS_RCS $<$<STREQUAL:$<CXX_COMPILER_ID>,MSVC>:src/updater.rc>)
 
-add_library(common STATIC src/miniz/miniz.c src/miniz/miniz.h src/psasio.hpp src/pscon.hpp src/pscruft.hpp src/psgit.hpp src/psmisc.hpp src/psupdater.hpp ps_config_updater.h ps_data_dummy.h ps_data_test00.h)
+add_library(common STATIC src/miniz/miniz.c src/miniz/miniz.h src/psasio.hpp src/pscon.hpp src/psdata.cpp src/psdata.hpp src/pscruft.hpp src/psgit.hpp src/psmisc.hpp src/pssfml.hpp src/psthr.hpp src/psupdater.hpp ps_config_updater.h ps_data_dummy.h ps_data_test00.h)
 target_link_libraries(common PUBLIC
 	Boost::boost Boost::date_time Boost::filesystem Boost::regex Boost::disable_autolinking
 	Threads::Threads LibGit2::LibGit2 $<$<STREQUAL:$<CXX_COMPILER_ID>,MSVC>:winhttp Rpcrt4 crypt32>
+	sfml-graphics sfml-system sfml-window
 )
 target_compile_definitions(common PUBLIC _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS _CRT_SECURE_NO_WARNINGS _WIN32_WINNT=0x0601)
 target_include_directories(common PUBLIC ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/miniz)
 set_target_properties(common PROPERTIES CXX_STANDARD 17)
 
 add_executable(updater ${PS_RCS} src/updater.cpp)
-target_link_libraries(updater PUBLIC common sfml-graphics sfml-system sfml-window)
+target_link_libraries(updater PUBLIC common)
 set_target_properties(updater PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PS_FORCED_EMPTY_RUNTIME_OUTPUT_DIRECTORY})
 
 add_executable(stage2 ${PS_RCS} src/stage2.cpp)
-target_link_libraries(stage2 PUBLIC common sfml-graphics sfml-system sfml-window)
+target_link_libraries(stage2 PUBLIC common)
 
 add_executable(tupdater2 ${PS_RCS} src/tupdater.cpp)
 target_link_libraries(tupdater2 PUBLIC common)

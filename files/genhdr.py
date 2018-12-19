@@ -20,7 +20,8 @@ def err():
 def make_hdr(nam: str, byt: bytes):
     hex: str = byt.hex()
     chex: str = ''.join(['0x' + hex[2*i] + hex[2*i+1] + ', ' for i in range(len(hex) // 2)])
-    return f'#include <cstdint>\nuint8_t g_{nam}[] = {{ {chex} }};\n'
+    chex_size: str = str(len(hex) // 2)
+    return f'#include <cstdint>\nuint8_t g_{nam}[] = {{ {chex} }};\nsize_t g_{nam}_size = {chex_size};\n'
 
 def mod(src_mod: str):
     # import src_mod and attempt to retrieve its config attribute as json

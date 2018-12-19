@@ -1,6 +1,8 @@
 #ifndef _PSGIT_HPP_
 #define _PSGIT_HPP_
 
+#include <cassert>
+#include <cctype>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -14,6 +16,7 @@
 #include <psmisc.hpp>
 
 typedef ::std::unique_ptr<git_blob, void(*)(git_blob *)> unique_ptr_gitblob;
+typedef ::std::unique_ptr<git_buf, void(*)(git_buf *)> unique_ptr_gitbuf;
 typedef ::std::unique_ptr<git_commit, void(*)(git_commit *)> unique_ptr_gitcommit;
 typedef ::std::unique_ptr<git_odb, void(*)(git_odb *)> unique_ptr_gitodb;
 typedef ::std::unique_ptr<git_repository, void(*)(git_repository *)> unique_ptr_gitrepository;
@@ -115,11 +118,12 @@ hexstr_from_oid(const git_oid &oid)
 	return std::string(git_oid_tostr(buf, sizeof buf, &oid));
 }
 
-inline bool
-hexstr_equals(const shahex_t &a, const shahex_t &b)
+inline void
+check_hexstr_equals(const shahex_t &a, const shahex_t &b)
 {
 	git_oid a_ = oid_from_hexstr(a), b_ = oid_from_hexstr(b);
-	return !git_oid_cmp(&a_, &b_);
+	if (!!git_oid_cmp(&a_, &b_))
+		throw std::runtime_error("not hexstr equals");
 }
 
 inline git_otype
@@ -148,7 +152,40 @@ tree_entry_filemode_bloblike_is(git_tree *t, size_t i)
 			git_tree_entry_filemode(git_tree_entry_byindex(t, i)) == GIT_FILEMODE_BLOB_EXECUTABLE);
 }
 
+inline std::string
+shahex_from_refcontent(const std::string &refcontent)
+{
+	// https://github.com/git/git/blob/master/refs/files-backend.c#L347
+	// https://github.com/git/git/blob/master/strbuf.c#L109
+	//   files_read_raw_ref uses strbuf_rtrim
+	//   rtrim right trims using std::isspace
+	std::string r(refcontent);
+	while (r.size() && std::isspace(r[r.size() - 1]))
+		r.pop_back();
+	if (r.size() != GIT_OID_HEXSZ)
+		throw std::runtime_error("refcontent size");
+	return r;
+}
+
+inline std::string
+shahex_tree_from_comtcontent(const std::string &comtcontent)
+{
+	// https://github.com/git/git/blob/master/commit.c#L386
+	//   parse_commit_buffer
+	const int tree_entry_len = GIT_OID_HEXSZ + 5;
+	if (comtcontent.size() <= tree_entry_len + 1 || comtcontent.substr(0, 5) != "tree " || comtcontent[tree_entry_len] != '\n')
+		throw PsConExc();
+	return ns_git::hexstr_from_oid(ns_git::oid_from_hexstr(comtcontent.substr(5, GIT_OID_HEXSZ)));
+}
+
+inline bool
+odb_exists(git_odb *odb, git_oid obj)
+{
+	return git_odb_exists(odb, &obj);
+}
+
 inline void blob_delete(git_blob *p) { if (p) git_blob_free(p); }
+inline void buf_delete(git_buf *p) { if (p) { git_buf_dispose(p); delete p; } }
 inline void commit_delete(git_commit *p) { if (p) git_commit_free(p); }
 inline void odb_delete(git_odb *p) { if (p) git_odb_free(p); }
 inline void repo_delete(git_repository *p) { if (p) git_repository_free(p); }
@@ -162,6 +199,12 @@ blob_lookup(git_repository *repo, const git_oid oid)
 	if (!!git_blob_lookup(&p, repo, &oid))
 		throw std::runtime_error("blob lookup");
 	return unique_ptr_gitblob(p, blob_delete);
+}
+
+inline unique_ptr_gitbuf
+buf_new()
+{
+	return unique_ptr_gitbuf(new git_buf(), buf_delete);
 }
 
 inline unique_ptr_gitcommit
@@ -188,6 +231,7 @@ repository_open(std::string path)
 	git_repository *p = NULL;
 	if (!! git_repository_open(&p, path.c_str()))
 		throw std::runtime_error("repository");
+	assert(git_repository_path(p));
 	return unique_ptr_gitrepository(p, repo_delete);
 }
 

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <string>
 #include <vector>
+#include <tuple>
 #include <utility>
 
 #include <boost/filesystem.hpp>
@@ -20,39 +21,32 @@ namespace ps
 inline std::string
 updater_object_get(PsCon *client, const shahex_t &obj)
 {
-	std::string loose = client->reqPost_("/objects/" + obj.substr(0, 2) + "/" + obj.substr(2), "").body();
-	return loose;
+	return client->reqPost("/objects/" + obj.substr(0, 2) + "/" + obj.substr(2), "").body();
 }
 
 inline shahex_t
 updater_head_get(PsCon *client, const std::string &refname)
 {
-	shahex_t objhex = client->reqPost_("/refs/heads/" + refname, "").body();
+	return ns_git::shahex_from_refcontent(client->reqPost("/refs/heads/" + refname, "").body());
+}
 
-	if (objhex.size() != GIT_OID_HEXSZ)
+inline shahex_t
+updater_commit_tree_get(PsCon *client, const shahex_t &commit)
+{
+	const std::string &incoming_comt = updater_object_get(client, commit);
+	ns_git::check_hexstr_equals(commit, ns_git::get_object_data_hexstr(incoming_comt));
+	const ns_git::ObjectDataInfo odi = ns_git::get_object_data_info(incoming_comt);
+	if (odi.m_type != "commit")
 		throw PsConExc();
-
-	return objhex;
+	return ns_git::shahex_tree_from_comtcontent(std::string(incoming_comt.data() + odi.m_data_offset, incoming_comt.size() - odi.m_data_offset));
 }
 
 inline void
-updater_object_get_write_raw(git_repository *repo, const shahex_t &obj, const std::string &incoming_loose)
+updater_object_write_raw_ifnotexist(PsCon *client, git_repository *repo, const shahex_t &obj, const std::string &incoming_loose)
 {
-	if (!ns_git::hexstr_equals(obj, ns_git::get_object_data_hexstr(ns_git::inflatebuf(incoming_loose))))
-		throw PsConExc();
-	assert(git_repository_path(repo));
-	const boost::filesystem::path objectpath = boost::filesystem::path(git_repository_path(repo)) / "objects" / obj.substr(0, 2) / obj.substr(2);
-	cruft_file_write_moving(".git", objectpath, incoming_loose);
-}
-
-inline void
-updater_object_get_write_raw_ifnotexist(PsCon *client, git_repository *repo, const shahex_t &obj)
-{
-	unique_ptr_gitodb odb(ns_git::odb_from_repo(repo));
-	git_oid _obj = ns_git::oid_from_hexstr(obj);
-	if (git_odb_exists(odb.get(), &_obj))
-		return;
-	updater_object_get_write_raw(repo, obj, updater_object_get(client, obj));
+	ns_git::check_hexstr_equals(obj, ns_git::get_object_data_hexstr(ns_git::inflatebuf(incoming_loose)));
+	if (! ns_git::odb_exists(ns_git::odb_from_repo(repo).get(), ns_git::oid_from_hexstr(obj)))
+		cruft_file_write_moving(".git", boost::filesystem::path(git_repository_path(repo)) / "objects" / obj.substr(0, 2) / obj.substr(2), incoming_loose);;
 }
 
 inline std::vector<shahex_t>
@@ -60,7 +54,7 @@ updater_trees_get_writing_recursive(PsCon *client, git_repository *repo, const s
 {
 	std::vector<shahex_t> out;
 
-	updater_object_get_write_raw_ifnotexist(client, repo, tree);
+	updater_object_write_raw_ifnotexist(client, repo, tree, updater_object_get(client, tree));
 
 	out.push_back(tree);
 
@@ -76,7 +70,7 @@ inline void
 updater_blobs_get_writing(PsCon *client, git_repository *repo, const std::vector<shahex_t> &blobs)
 {
 	for (const auto &blob : blobs)
-		updater_object_get_write_raw_ifnotexist(client, repo, blob);
+		updater_object_write_raw_ifnotexist(client, repo, blob, updater_object_get(client, blob));
 }
 
 inline std::vector<shahex_t>
@@ -95,8 +89,7 @@ updater_blobs_list(git_repository *repo, const std::vector<shahex_t> &trees)
 inline unique_ptr_gitblob
 updater_tree_entry_blob(git_repository *repo, const shahex_t &tree, const std::string &entry)
 {
-	unique_ptr_gittree t(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)));
-	const git_tree_entry *e = git_tree_entry_byname(t.get(), entry.c_str());
+	const git_tree_entry *e = git_tree_entry_byname(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)).get(), entry.c_str());
 	if (!e || git_tree_entry_filemode(e) != GIT_FILEMODE_BLOB && git_tree_entry_filemode(e) != GIT_FILEMODE_BLOB_EXECUTABLE)
 		throw PsConExc();
 	return ns_git::blob_lookup(repo, *git_tree_entry_id(e));
@@ -106,37 +99,23 @@ inline std::string
 updater_tree_entry_blob_content(git_repository *repo, const shahex_t &tree, const std::string &entry)
 {
 	unique_ptr_gitblob b(updater_tree_entry_blob(repo, tree, entry));
-	std::string content((const char *)git_blob_rawcontent(b.get()), (size_t)git_blob_rawsize(b.get()));
-	return content;
+	return std::string((const char *)git_blob_rawcontent(b.get()), (size_t)git_blob_rawsize(b.get()));;
 }
 
 inline shahex_t
 updater_commit_create(git_repository *repo, const shahex_t &tree)
 {
-	unique_ptr_gitodb odb(ns_git::odb_from_repo(repo));
-	unique_ptr_gitsignature sig(ns_git::sig_new_dummy());
-	unique_ptr_gittree t(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)));
-
-	git_buf buf = {};
+	unique_ptr_gitbuf buf(ns_git::buf_new());
 	git_oid commit_oid_even_if_error = {};
 
-	if (!!git_commit_create_buffer(&buf, repo, sig.get(), sig.get(), "UTF-8", "Dummy", t.get(), 0, NULL))
+	if (!!git_commit_create_buffer(buf.get(), repo, ns_git::sig_new_dummy().get(), ns_git::sig_new_dummy().get(), "UTF-8", "Dummy", ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)).get(), 0, NULL))
 		throw PsConExc();
  
-	if (!!git_odb_write(&commit_oid_even_if_error, odb.get(), buf.ptr, buf.size, GIT_OBJ_COMMIT))
-		if (!git_odb_exists(odb.get(), &commit_oid_even_if_error))
+	if (!!git_odb_write(&commit_oid_even_if_error, ns_git::odb_from_repo(repo).get(), buf->ptr, buf->size, GIT_OBJ_COMMIT))
+		if (!git_odb_exists(ns_git::odb_from_repo(repo).get(), &commit_oid_even_if_error))
 			throw PsConExc();
 
 	return ns_git::hexstr_from_oid(commit_oid_even_if_error);
-}
-
-inline void
-updater_ref_create(git_repository *repo, const std::string &refname, const git_oid commit)
-{
-	git_reference *ref = NULL;
-	if (!! git_reference_create(&ref, repo, refname.c_str(), &commit, true, "DummyLogMessage"))
-		throw PsConExc();
-	git_reference_free(ref);
 }
 
 inline boost::filesystem::path
@@ -162,20 +141,42 @@ updater_running_exe_content_file_replace_ensure(
 	if (cruft_file_read(curexefname) == content)
 		return false;
 	// attempt ensuring content
-	boost::filesystem::path tryout_exe_path = updater_running_exe_content_file_replace_prepare(content, curexefname);
-	cruft_rename_file_over_running_exe(tryout_exe_path.string(), curexefname);
+	cruft_rename_file_over_running_exe(updater_running_exe_content_file_replace_prepare(content, curexefname).string(), curexefname);
 	// was attempt successful?
 	if (cruft_file_read(curexefname) != content)
 		throw std::runtime_error("failed updating");
 	return true;
 }
 
-inline std::pair<bool, bool>
+inline std::vector<std::string>
+updater_argv_vectorize(int argc, char **argv)
+{
+	if (argc < 1)
+		throw std::runtime_error("argc");
+	std::vector<std::string> args;
+	for (size_t i = 1; i < argc; i++)
+		args.push_back(argv[i]);
+	return args;
+}
+
+inline std::string
+updater_argv_find_opt_arg(const std::vector<std::string> &args, std::string opt)
+{
+	auto it = std::find(args.begin(), args.end(), opt);
+	if (std::distance(it, args.end()) < 2)
+		throw std::runtime_error("not opt arg");
+	return std::string(*++it);
+}
+
+inline std::tuple<bool, bool, std::string>
 updater_argv_parse(int argc, char **argv)
 {
-	return std::make_pair(
-		std::find(argv + 1, argv + argc, "--tryout") != argv + argc,
-		std::find(argv + 1, argv + argc, "--skipselfupdate") != argv + argc);
+	std::vector<std::string> args(updater_argv_vectorize(argc, argv));
+	return {
+		std::find(args.begin(), args.end(), "--tryout") != args.end(),
+		std::find(args.begin(), args.end(), "--skipselfupdate") != args.end(),
+		updater_argv_find_opt_arg(args, "--fsmode")
+	};
 }
 
 inline void
