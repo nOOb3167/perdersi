@@ -33,7 +33,7 @@ int main(int argc, char **argv)
 	config.put("ARG_SKIPSELFUPDATE", (int)arg_skipselfupdate);
 	config.put("ARG_FSMODE", arg_fsmode);
 
-	sp<PsCon> client;
+	sp<Con> client;
 
 	if (config.get<int>("ARG_TRYOUT"))
 		return 123;
@@ -41,8 +41,8 @@ int main(int argc, char **argv)
 	sp<git_repository> repo(git_repository_ensure(config.get<std::string>("REPO_DIR")));
 
 	client = config.get<std::string>("ARG_FSMODE") != "" ?
-		sp<PsCon>(new PsConFs(config.get<std::string>("ARG_FSMODE"))) :
-		sp<PsCon>(new PsConNet(config.get<std::string>("ORIGIN_DOMAIN_API"), config.get<std::string>("LISTEN_PORT"), ""));
+		sp<Con>(new ConFs(config.get<std::string>("ARG_FSMODE"))) :
+		sp<Con>(new ConNet(config.get<std::string>("ORIGIN_DOMAIN_API"), config.get<std::string>("LISTEN_PORT"), ""));
 	client->m_prog.setRepo(repo);
 
 	sp<Thr> thr(Thr::create(config, client));

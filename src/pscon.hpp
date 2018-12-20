@@ -1,5 +1,5 @@
-#ifndef _PSCON_HPP_
-#define _PSCON_HPP_
+#ifndef _Con_HPP_
+#define _Con_HPP_
 
 #include <cassert>
 #include <mutex>
@@ -26,10 +26,10 @@ using res_t = ::http::response<http::string_body>;
 namespace ps
 {
 
-class PsConExc : public std::runtime_error
+class ConExc : public std::runtime_error
 {
 public:
-	inline PsConExc() :
+	inline ConExc() :
 		std::runtime_error("error")
 	{}
 };
@@ -87,20 +87,20 @@ public:
 	std::vector<shahex_t> m_objects_requested;
 };
 
-class PsCon
+class Con
 {
 public:
-	inline virtual ~PsCon() {};
+	inline virtual ~Con() {};
 	inline virtual res_t reqPost(const std::string &path, const std::string &data) = 0;
 	
 	ConProgress m_prog;
 };
 
-class PsConNet : public PsCon
+class ConNet : public Con
 {
 public:
-	inline PsConNet(const std::string &host, const std::string &port, const std::string &host_http_rootpath) :
-		PsCon(),
+	inline ConNet(const std::string &host, const std::string &port, const std::string &host_http_rootpath) :
+		Con(),
 		m_host(host),
 		m_port(port),
 		m_host_http(host + ":" + port),
@@ -113,7 +113,7 @@ public:
 		boost::asio::connect(*m_socket, m_resolver_r.begin(), m_resolver_r.end());
 	};
 
-	inline ~PsConNet()
+	inline ~ConNet()
 	{
 		m_socket->shutdown(tcp::socket::shutdown_both);
 	}
@@ -150,7 +150,7 @@ public:
 		m_prog.onRequest(path, data);
 		res_t res = reqPost_(path, data);
 		if (res.result_int() != 200)
-			throw PsConExc();
+			throw ConExc();
 		return res;
 	}
 
@@ -164,11 +164,11 @@ public:
 	sp<tcp::socket> m_socket;
 };
 
-class PsConFs : public PsCon
+class ConFs : public Con
 {
 public:
-	inline PsConFs(const std::string &gitdir) :
-		PsCon(),
+	inline ConFs(const std::string &gitdir) :
+		Con(),
 		m_gitdir(gitdir),
 		m_objdir(m_gitdir / "objects"),
 		m_refdir(m_gitdir / "refs")
@@ -177,11 +177,11 @@ public:
 			!boost::filesystem::exists(m_objdir) ||
 			!boost::filesystem::exists(m_refdir))
 		{
-			throw PsConExc();
+			throw ConExc();
 		}
 	};
 
-	inline ~PsConFs()
+	inline ~ConFs()
 	{
 	}
 
@@ -198,4 +198,4 @@ public:
 
 }
 
-#endif /* _PSCON_HPP_ */
+#endif /* _Con_HPP_ */

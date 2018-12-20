@@ -74,13 +74,13 @@ public:
 class Thr : public ThrBase
 {
 public:
-	Thr(const pt_t &config, const sp<PsCon> &client) :
+	Thr(const pt_t &config, const sp<Con> &client) :
 		ThrBase(),
 		m_config(config),
 		m_client(client)
 	{}
 
-	static up<Thr> create(const pt_t &config, const sp<PsCon> &client)
+	static up<Thr> create(const pt_t &config, const sp<Con> &client)
 	{
 		up<Thr> r(new Thr(config, client));
 		r->start();
@@ -115,7 +115,7 @@ public:
 	}
 
 	pt_t m_config;
-	sp<PsCon> m_client;
+	sp<Con> m_client;
 };
 
 }
