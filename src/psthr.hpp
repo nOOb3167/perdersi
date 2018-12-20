@@ -96,16 +96,18 @@ public:
 		const std::string updatr = m_config.get<std::string>("UPDATER_EXE_RELATIVE");
 
 		const shahex_t head = updater_head_get(m_client.get(), "master");
+		const shahex_t tree = updater_commit_tree_get(m_client.get(), head);
 
 		std::cout << "repodir: " << git_repository_path(repo.get()) << std::endl;
 		std::cout << "chkodir: " << chkoutdir.string() << std::endl;
 		std::cout << "stage2p: " << stage2path.string() << std::endl;
 		std::cout << "updatr: " << updatr << std::endl;
 		std::cout << "head: " << head << std::endl;
+		std::cout << "tree: " << tree << std::endl;
 
-		const shahex_t tree = updater_commit_tree_get(m_client.get(), head);
 		const std::vector<shahex_t> trees = updater_trees_get_writing_recursive(m_client.get(), repo.get(), tree);
 		const std::vector<shahex_t> blobs = updater_blobs_list(repo.get(), trees);
+		m_client->m_prog.setObjectsList(blobs);
 		updater_blobs_get_writing(m_client.get(), repo.get(), blobs);
 		git_checkout_obj(repo.get(), head, chkoutdir.string());
 

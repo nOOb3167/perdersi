@@ -22,10 +22,10 @@ namespace ps
 {
 
 inline boost::cmatch
-cruft_regex_search(const std::string &regex, const std::string &data)
+cruft_regex_search(const std::string &regex, const std::string &data, boost::regex_constants::match_flag_type flags = boost::match_continuous)
 {
 	boost::cmatch what;
-	if (!boost::regex_search(data.c_str(), what, boost::regex(regex), boost::match_continuous))
+	if (!boost::regex_search(data.c_str(), what, boost::regex(regex), flags))
 		throw std::runtime_error("regex_search");
 	return what;
 }

@@ -15,6 +15,7 @@
 #include <pscruft.hpp>
 #include <psmisc.hpp>
 #include <pscon.hpp>
+#include <psgit.hpp>
 #include <pssfml.hpp>
 #include <psthr.hpp>
 #include <psupdater.hpp>
@@ -37,9 +38,12 @@ int main(int argc, char **argv)
 	if (config.get<int>("ARG_TRYOUT"))
 		return 123;
 
+	sp<git_repository> repo(git_repository_ensure(config.get<std::string>("REPO_DIR")));
+
 	client = config.get<std::string>("ARG_FSMODE") != "" ?
 		sp<PsCon>(new PsConFs(config.get<std::string>("ARG_FSMODE"))) :
 		sp<PsCon>(new PsConNet(config.get<std::string>("ORIGIN_DOMAIN_API"), config.get<std::string>("LISTEN_PORT"), ""));
+	client->m_prog.setRepo(repo);
 
 	sp<Thr> thr(Thr::create(config, client));
 	SfWin win(thr);

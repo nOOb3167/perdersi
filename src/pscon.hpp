@@ -1,7 +1,9 @@
 #ifndef _PSCON_HPP_
 #define _PSCON_HPP_
 
+#include <cassert>
 #include <mutex>
+#include <set>
 #include <string>
 #include <vector>
 #include <stdexcept>
@@ -13,12 +15,16 @@
 
 #include <psasio.hpp>
 #include <pscruft.hpp>
+#include <psgit.hpp>
 #include <psmisc.hpp>
 
 using tcp = ::boost::asio::ip::tcp;
 namespace http = ::boost::beast::http;
 
 using res_t = ::http::response<http::string_body>;
+
+namespace ps
+{
 
 class PsConExc : public std::runtime_error
 {
@@ -28,29 +34,69 @@ public:
 	{}
 };
 
-class PsCon
+class con_tag_ratio_t {};
+
+class ConEst
 {
 public:
-	inline virtual ~PsCon() {};
-	inline virtual res_t reqPost(const std::string &path, const std::string &data) = 0;
-	inline virtual void onRequest(const std::string &path, const std::string &data) {};
+	inline ConEst(float a, float b, con_tag_ratio_t) :
+		m_r_a(a),
+		m_r_b(b)
+	{}
+
+	float m_r_a, m_r_b;
 };
 
-class PsConTest : public virtual PsCon
+class ConProgress
 {
 public:
-	inline virtual void onRequest(const std::string &path, const std::string &data) override
+	inline void setRepo(const sp<git_repository> &repo) { m_repo = repo; }
+
+	inline void setObjectsList(const std::vector<shahex_t> &objs)
 	{
+		assert(m_repo);
+		std::set<shahex_t> all;
+		for (const auto &obj : objs)
+			all.insert(obj);
+		std::set<shahex_t> mis;
+		for (const auto &obj : objs)
+			if (!git_odb_exists(odb_from_repo(m_repo.get()).get(), git_hex2bin(obj)))
+				mis.insert(obj);
+		m_objects_all = std::move(all);
+		m_objects_missing = std::move(mis);
+	}
+
+	inline ConEst doEstimate()
+	{
+		return ConEst(m_objects_missing.size(), m_objects_all.size(), con_tag_ratio_t());
+	}
+
+	inline void onRequest(const std::string &path, const std::string &data)
+	{
+		std::lock_guard<std::mutex> l(m_mtx);
 		boost::cmatch what;
 		if (boost::regex_search(path.c_str(), what, boost::regex("/objects/([[:xdigit:]]{2})/([[:xdigit:]]{38})"), boost::match_default))
 			m_objects_requested.push_back(boost::algorithm::to_lower_copy(what[1].str() + what[2].str()));
 	}
 
+
 	std::mutex m_mtx;
+	sp<git_repository> m_repo;
+	std::set<shahex_t> m_objects_all;
+	std::set<shahex_t> m_objects_missing;
 	std::vector<shahex_t> m_objects_requested;
 };
 
-class PsConNet : public virtual PsCon, public virtual PsConTest
+class PsCon
+{
+public:
+	inline virtual ~PsCon() {};
+	inline virtual res_t reqPost(const std::string &path, const std::string &data) = 0;
+	
+	ConProgress m_prog;
+};
+
+class PsConNet : public PsCon
 {
 public:
 	inline PsConNet(const std::string &host, const std::string &port, const std::string &host_http_rootpath) :
@@ -80,7 +126,6 @@ public:
 
 	inline res_t reqPost_(const std::string &path, const std::string &data)
 	{
-		onRequest(path, data);
 		http::request<http::string_body> req(http::verb::post, m_host_http_rootpath + path, 11);
 		req.set(http::field::host, m_host_http);
 		req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
@@ -102,7 +147,8 @@ public:
 
 	inline virtual res_t reqPost(const std::string &path, const std::string &data) override
 	{
-		res_t res = reqPost(path, data);
+		m_prog.onRequest(path, data);
+		res_t res = reqPost_(path, data);
 		if (res.result_int() != 200)
 			throw PsConExc();
 		return res;
@@ -118,7 +164,7 @@ public:
 	sp<tcp::socket> m_socket;
 };
 
-class PsConFs : public virtual PsCon, public virtual PsConTest
+class PsConFs : public PsCon
 {
 public:
 	inline PsConFs(const std::string &gitdir) :
@@ -141,14 +187,15 @@ public:
 
 	inline virtual res_t reqPost(const std::string &path, const std::string &data) override
 	{
-		std::string content = ps::cruft_file_read(m_gitdir / path);
-		res_t res(boost::beast::http::status::ok, 11, content);
-		return res;
+		m_prog.onRequest(path, data);
+		return res_t(boost::beast::http::status::ok, 11, ps::cruft_file_read(m_gitdir / path));
 	}
 
 	boost::filesystem::path m_gitdir;
 	boost::filesystem::path m_objdir;
 	boost::filesystem::path m_refdir;
 };
+
+}
 
 #endif /* _PSCON_HPP_ */
