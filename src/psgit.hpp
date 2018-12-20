@@ -165,13 +165,13 @@ git_refcontent2hex(const std::string &refcontent)
 }
 
 inline std::string
-git_comtcontenttree2hex(const std::string &comtcontent)
+git_comtcontent_tree2hex(const std::string &comtcontent)
 {
 	// https://github.com/git/git/blob/master/commit.c#L386
 	//   parse_commit_buffer
 	const int tree_entry_len = GIT_OID_HEXSZ + 5;
 	if (comtcontent.size() <= tree_entry_len + 1 || comtcontent.substr(0, 5) != "tree " || comtcontent[tree_entry_len] != '\n')
-		throw PsConExc();
+		throw std::runtime_error("comtcontenttree");
 	return git_bin2hex(git_hex2bin(comtcontent.substr(5, GIT_OID_HEXSZ)));
 }
 

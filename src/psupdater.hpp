@@ -38,7 +38,7 @@ updater_commit_tree_get(PsCon *client, const shahex_t &commit)
 	const GitObjectDataInfo odi(incoming_comt, git_tag_incoming_data_t());
 	if (odi.m_type != "commit")
 		throw PsConExc();
-	return git_comtcontenttree2hex(std::string(incoming_comt.data() + odi.m_data_offset, incoming_comt.size() - odi.m_data_offset));
+	return git_comtcontent_tree2hex(std::string(incoming_comt.data() + odi.m_data_offset, incoming_comt.size() - odi.m_data_offset));
 }
 
 inline void

@@ -103,7 +103,8 @@ public:
 		std::cout << "updatr: " << updatr << std::endl;
 		std::cout << "head: " << head << std::endl;
 
-		const std::vector<shahex_t> trees = updater_trees_get_writing_recursive(m_client.get(), repo.get(), head);
+		const shahex_t tree = updater_commit_tree_get(m_client.get(), head);
+		const std::vector<shahex_t> trees = updater_trees_get_writing_recursive(m_client.get(), repo.get(), tree);
 		const std::vector<shahex_t> blobs = updater_blobs_list(repo.get(), trees);
 		updater_blobs_get_writing(m_client.get(), repo.get(), blobs);
 		git_checkout_obj(repo.get(), head, chkoutdir.string());
