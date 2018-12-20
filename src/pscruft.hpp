@@ -21,6 +21,15 @@ using pt_t = ::boost::property_tree::ptree;
 namespace ps
 {
 
+inline boost::cmatch
+cruft_regex_search(const std::string &regex, const std::string &data)
+{
+	boost::cmatch what;
+	if (!boost::regex_search(data.c_str(), what, boost::regex(regex), boost::match_continuous))
+		throw std::runtime_error("regex_search");
+	return what;
+}
+
 inline std::string
 cruft_current_executable_filename()
 {

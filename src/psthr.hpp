@@ -89,7 +89,7 @@ public:
 
 	virtual void run() override
 	{
-		unique_ptr_gitrepository repo(ns_git::repository_ensure(m_config.get<std::string>("REPO_DIR")));
+		unique_ptr_gitrepository repo(git_repository_ensure(m_config.get<std::string>("REPO_DIR")));
 
 		const boost::filesystem::path chkoutdir = cruft_config_get_path(m_config, "REPO_CHK_DIR");
 		const boost::filesystem::path stage2path = chkoutdir / m_config.get<std::string>("UPDATER_STAGE2_EXE_RELATIVE");
@@ -106,7 +106,7 @@ public:
 		const std::vector<shahex_t> trees = updater_trees_get_writing_recursive(m_client.get(), repo.get(), head);
 		const std::vector<shahex_t> blobs = updater_blobs_list(repo.get(), trees);
 		updater_blobs_get_writing(m_client.get(), repo.get(), blobs);
-		ns_git::checkout_obj(repo.get(), head, chkoutdir.string());
+		git_checkout_obj(repo.get(), head, chkoutdir.string());
 
 		updater_replace_cond(m_config.get<int>("ARG_SKIPSELFUPDATE"), repo.get(), head, updatr, cruft_current_executable_filename(), stage2path);
 	}

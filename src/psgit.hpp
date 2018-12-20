@@ -13,6 +13,7 @@
 #include <git2.h>
 #include <miniz.h>
 
+#include <pscruft.hpp>
 #include <psmisc.hpp>
 
 typedef ::std::unique_ptr<git_blob, void(*)(git_blob *)> unique_ptr_gitblob;
@@ -23,17 +24,23 @@ typedef ::std::unique_ptr<git_repository, void(*)(git_repository *)> unique_ptr_
 typedef ::std::unique_ptr<git_signature, void(*)(git_signature *)> unique_ptr_gitsignature;
 typedef ::std::unique_ptr<git_tree, void(*)(git_tree *)> unique_ptr_gittree;
 
-namespace ns_git
+namespace ps
 {
 
-class ObjectDataInfo
+class git_tag_incoming_data_t {};
+
+class GitObjectDataInfo
 {
 public:
-	inline ObjectDataInfo(const std::string &data, const std::string &type, size_t data_offset) :
-		m_type(type),
-		m_data_offset(data_offset)
+	inline GitObjectDataInfo(const std::string &incoming_data, git_tag_incoming_data_t) :
+		m_type(),
+		m_data_offset()
 	{
-		if (m_data_offset >= data.size())
+		/* format: "(type)(space)(number)(NULL)" */
+		boost::cmatch what(cruft_regex_search("([[:alpha:]]+) ([[:digit:]]+)\000", incoming_data));
+		m_type = what[1];
+		m_data_offset = (what[0].second + 1) - what[0].first;
+		if (m_data_offset >= incoming_data.size())
 			throw std::runtime_error("odi data_offset");
 	}
 
@@ -42,7 +49,7 @@ public:
 };
 
 inline std::string
-inflatebuf(const std::string &buf)
+git_inflatebuf(const std::string &buf)
 {
 	/* https://www.zlib.net/zpipe.c
 	     official example
@@ -92,18 +99,8 @@ inflatebuf(const std::string &buf)
 	return result;
 }
 
-inline ObjectDataInfo
-get_object_data_info(const std::string &data)
-{
-	/* format: "(type)(space)(number)(NULL)" */
-	boost::cmatch what;
-	if (! boost::regex_search(data.c_str(), what, boost::regex("([[:alpha:]]+) ([[:digit:]]+)\000"), boost::match_continuous))
-		throw std::runtime_error("hdr regex");
-	return ObjectDataInfo(data, what[1], (what[0].second + 1) - what[0].first);
-}
-
 inline git_oid
-oid_from_hexstr(const shahex_t &str)
+git_hex2bin(const shahex_t &str)
 {
 	git_oid oid = {};
 	if (str.size() != GIT_OID_HEXSZ || !!git_oid_fromstr(&oid, str.c_str()))
@@ -112,22 +109,22 @@ oid_from_hexstr(const shahex_t &str)
 }
 
 inline std::string
-hexstr_from_oid(const git_oid &oid)
+git_bin2hex(const git_oid &oid)
 {
 	char buf[GIT_OID_HEXSZ + 1] = {};
 	return std::string(git_oid_tostr(buf, sizeof buf, &oid));
 }
 
 inline void
-check_hexstr_equals(const shahex_t &a, const shahex_t &b)
+git_hexeq(const shahex_t &a, const shahex_t &b)
 {
-	git_oid a_ = oid_from_hexstr(a), b_ = oid_from_hexstr(b);
+	git_oid a_ = git_hex2bin(a), b_ = git_hex2bin(b);
 	if (!!git_oid_cmp(&a_, &b_))
 		throw std::runtime_error("not hexstr equals");
 }
 
 inline git_otype
-otype_from_type(const std::string &type)
+git_type2otype(const std::string &type)
 {
 	static std::map<std::string, git_otype> tbl = {{"commit", GIT_OBJ_COMMIT}, {"tree", GIT_OBJ_TREE}, {"blob", GIT_OBJ_BLOB}};
 	if (tbl.find(type) == tbl.end())
@@ -136,24 +133,24 @@ otype_from_type(const std::string &type)
 }
 
 inline shahex_t
-get_object_data_hexstr(const std::string &incoming_data)
+git_incoming_data_hex(const std::string &incoming_data)
 {
-	const ns_git::ObjectDataInfo info = ns_git::get_object_data_info(incoming_data);
+	const GitObjectDataInfo info(incoming_data, git_tag_incoming_data_t());
 	git_oid oid_loose = {};
-	if (!!git_odb_hash(&oid_loose, incoming_data.data() + info.m_data_offset, incoming_data.size() - info.m_data_offset, ns_git::otype_from_type(info.m_type)))
+	if (!!git_odb_hash(&oid_loose, incoming_data.data() + info.m_data_offset, incoming_data.size() - info.m_data_offset, git_type2otype(info.m_type)))
 		throw std::runtime_error("object data oid hash");
-	return hexstr_from_oid(oid_loose);
+	return git_bin2hex(oid_loose);
 }
 
 inline bool
-tree_entry_filemode_bloblike_is(git_tree *t, size_t i)
+git_tree_entry_filemode_bloblike_is(git_tree *t, size_t i)
 {
 	return (git_tree_entry_filemode(git_tree_entry_byindex(t, i)) == GIT_FILEMODE_BLOB ||
 			git_tree_entry_filemode(git_tree_entry_byindex(t, i)) == GIT_FILEMODE_BLOB_EXECUTABLE);
 }
 
 inline std::string
-shahex_from_refcontent(const std::string &refcontent)
+git_refcontent2hex(const std::string &refcontent)
 {
 	// https://github.com/git/git/blob/master/refs/files-backend.c#L347
 	// https://github.com/git/git/blob/master/strbuf.c#L109
@@ -168,18 +165,18 @@ shahex_from_refcontent(const std::string &refcontent)
 }
 
 inline std::string
-shahex_tree_from_comtcontent(const std::string &comtcontent)
+git_comtcontenttree2hex(const std::string &comtcontent)
 {
 	// https://github.com/git/git/blob/master/commit.c#L386
 	//   parse_commit_buffer
 	const int tree_entry_len = GIT_OID_HEXSZ + 5;
 	if (comtcontent.size() <= tree_entry_len + 1 || comtcontent.substr(0, 5) != "tree " || comtcontent[tree_entry_len] != '\n')
 		throw PsConExc();
-	return ns_git::hexstr_from_oid(ns_git::oid_from_hexstr(comtcontent.substr(5, GIT_OID_HEXSZ)));
+	return git_bin2hex(git_hex2bin(comtcontent.substr(5, GIT_OID_HEXSZ)));
 }
 
 inline bool
-odb_exists(git_odb *odb, git_oid obj)
+git_odb_exists(git_odb *odb, git_oid obj)
 {
 	return git_odb_exists(odb, &obj);
 }
@@ -258,12 +255,12 @@ tree_lookup_v(git_repository *repo, const std::vector<shahex_t> &oids)
 {
 	std::vector<unique_ptr_gittree> trees;
 	for (const auto &a : oids)
-		trees.push_back(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(a)));
+		trees.push_back(tree_lookup(repo, git_hex2bin(a)));
 	return trees;
 }
 
 inline unique_ptr_gitrepository
-repository_ensure(const std::string &repopath)
+git_repository_ensure(const std::string &repopath)
 {
 	int err = 0;
 	git_repository *repo = NULL;
@@ -273,23 +270,22 @@ repository_ensure(const std::string &repopath)
 
 	if (!!(err = git_repository_init_ext(&repo, repopath.c_str(), &init_options))) {
 		if (err == GIT_EEXISTS)
-			return unique_ptr_gitrepository(ns_git::repository_open(repopath.c_str()));
+			return unique_ptr_gitrepository(repository_open(repopath.c_str()));
 		throw std::runtime_error("ensure repository init");
 	}
-	return unique_ptr_gitrepository(repo, ns_git::repo_delete);
+	return unique_ptr_gitrepository(repo, repo_delete);
 }
 
 inline void
-checkout_obj(git_repository *repo, const shahex_t &tree, const std::string &chkoutdir)
+git_checkout_obj(git_repository *repo, const shahex_t &tree, const std::string &chkoutdir)
 {
-	if (!boost::regex_search(chkoutdir.c_str(), boost::cmatch(), boost::regex("chk")))
-		throw std::runtime_error("checkout sanity");
+	cruft_regex_search("chk", chkoutdir);
 	// FIXME: consider GIT_CHECKOUT_REMOVE_UNTRACKED
 	git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
 	opts.checkout_strategy = GIT_CHECKOUT_FORCE;
 	opts.disable_filters = 1;
 	opts.target_directory = chkoutdir.c_str();
-	unique_ptr_gittree _tree(ns_git::tree_lookup(repo, ns_git::oid_from_hexstr(tree)));
+	unique_ptr_gittree _tree(tree_lookup(repo, git_hex2bin(tree)));
 	if (!!git_checkout_tree(repo, (git_object *) _tree.get(), &opts))
 		throw std::runtime_error("checkout tree");
 }
