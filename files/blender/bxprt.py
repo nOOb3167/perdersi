@@ -18,16 +18,19 @@ class Outp:
     def __sub__(self, x):
         def f(x):
             return format(x, ' 8.4')
-        if type(x) == str:
+        tx = type(x)
+        if tx == str:
             self.p(x)
-        elif type(x) == mathutils.Vector:
+        elif tx == int:
+            self.p(str(x))
+        elif tx == mathutils.Vector:
             if len(x) == 2:
                 self.p(f'{f(x[0])} {f(x[1])}')
             elif len(x) == 3:
                 self.p(f'{f(x[0])} {f(x[1])} {f(x[2])}')
             else:
                 raise RuntimeError()
-        elif type(x) == mathutils.Matrix:
+        elif tx == mathutils.Matrix:
             self.p(f'{f(x.row[0][0])} {f(x.row[0][1])} {f(x.row[0][2])} {f(x.row[0][3])}')
             self.p(f'{f(x.row[1][0])} {f(x.row[1][1])} {f(x.row[1][2])} {f(x.row[1][3])}')
             self.p(f'{f(x.row[2][0])} {f(x.row[2][1])} {f(x.row[2][2])} {f(x.row[2][3])}')
@@ -91,6 +94,26 @@ class MeOb:
         meob.m_mesh.calc_loop_triangles() # FIXME: loop_triangles not used anymore
         return meob
 
+def _genloopidx(polygons: bpy.types.MeshPolygon):
+    for poly in polygons:
+        if poly.loop_total == 3:
+            yield poly.loop_start + 0
+            yield poly.loop_start + 1
+            yield poly.loop_start + 2
+        elif poly.loop_total == 4:
+            # FIXME: CW CCW NAIVE TRIANGULATION ETC
+            #   although results seem consistent with loop_triangles
+            #   for v in meob.m_mesh.loop_triangles:
+            #       g_o - mathutils.Vector((v.vertices[0], v.vertices[1], v.vertices[2]))
+            yield poly.loop_start + 0
+            yield poly.loop_start + 1
+            yield poly.loop_start + 2
+            yield poly.loop_start + 0
+            yield poly.loop_start + 2
+            yield poly.loop_start + 3
+        else:
+            raise RuntimeError()
+
 def p(*args):
     if len(args):
         for x in range(len(args) - 1):
@@ -102,33 +125,18 @@ def _modl(meob: MeOb):
     #   Mesh.loops, Mesh.uv_layers Mesh.vertex_colors are all aligned
     #   so the same polygon loop indices can be used to find
     #   the UV’s and vertex colors as with as the vertices.
-    map_vertidx_loopidx = {}
-    for poly in meob.m_mesh.polygons:
-        for loopidx in range(poly.loop_start, poly.loop_start + poly.loop_total):
-            map_vertidx_loopidx.setdefault(meob.m_mesh.loops[loopidx].vertex_index, loopidx)
-    assert(all([x in map_vertidx_loopidx for x in range(len(map_vertidx_loopidx))]))
     with WithSect('modl'), WithIdent():
         g_o - 'name'
         with WithIdent():
             g_o - meob.m_mesh.name
         g_o - 'vert'
         with WithIdent():
-            for v in meob.m_mesh.vertices:
-                g_o - v.co
+            for l in _genloopidx(meob.m_mesh.polygons):
+                g_o - meob.m_mesh.vertices[meob.m_mesh.loops[l].vertex_index].co
         g_o - 'indx'
         with WithIdent():
-            for poly in meob.m_mesh.polygons:
-                if poly.loop_total == 3:
-                    g_o - mathutils.Vector([meob.m_mesh.loops[poly.loop_start + 0].vertex_index, meob.m_mesh.loops[poly.loop_start + 1].vertex_index, meob.m_mesh.loops[poly.loop_start + 2].vertex_index])
-                elif poly.loop_total == 4:
-                    # FIXME: CW CCW NAIVE TRIANGULATION ETC
-                    #   although results seem consistent with loop_triangles
-                    #   for v in meob.m_mesh.loop_triangles:
-                    #       g_o - mathutils.Vector((v.vertices[0], v.vertices[1], v.vertices[2]))
-                    g_o - mathutils.Vector([meob.m_mesh.loops[poly.loop_start + 0].vertex_index, meob.m_mesh.loops[poly.loop_start + 1].vertex_index, meob.m_mesh.loops[poly.loop_start + 2].vertex_index])
-                    g_o - mathutils.Vector([meob.m_mesh.loops[poly.loop_start + 0].vertex_index, meob.m_mesh.loops[poly.loop_start + 2].vertex_index, meob.m_mesh.loops[poly.loop_start + 3].vertex_index])
-                else:
-                    raise RuntimeError()
+            for v in range(len(list(_genloopidx(meob.m_mesh.polygons)))):
+                g_o - v
         g_o - 'uv'
         with WithIdent():
             for layr in meob.m_mesh.uv_layers:
@@ -139,14 +147,8 @@ def _modl(meob: MeOb):
                         g_o - layr.name
                     g_o - 'vect'
                     with WithIdent():
-                        for poly in meob.m_mesh.polygons:
-                            if poly.loop_total == 3:
-                                g_o - layr.data[poly.loop_start + 0].uv
-                                g_o - layr.data[poly.loop_start + 1].uv
-                                g_o - layr.data[poly.loop_start + 2].uv
-                            elif poly.loop_total == 4:
-#                        for i in range(len(map_vertidx_loopidx)):
-#                            g_o - layr.data[map_vertidx_loopidx[i]].uv
+                        for l in _genloopidx(meob.m_mesh.polygons):
+                            g_o - layr.data[l].uv
 
 def _armt(meob: MeOb):
     with WithSect('armt'), WithIdent():
