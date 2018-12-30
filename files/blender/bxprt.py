@@ -1,12 +1,16 @@
 import bpy
 import mathutils
-from dataclasses import (dataclass as DATACLASSES_dataclass)
+import typing
+from dataclasses import dataclass as DATACLASSES_dataclass
 from functools import reduce as FUNCTOOLS_reduce
 from functools import wraps as FUNCTOOLS_wraps
 from pprint import pprint as pp
 
 # mesh.vertices.weights
 # http://www.opengl-tutorial.org/intermediate-tutorials/tutorial-9-vbo-indexing/
+# https://docs.blender.org/api/blender2.8/bpy.types.Object.html#bpy.types.Object.find_armature
+# https://blender.stackexchange.com/questions/74461/exporting-weight-and-bone-elements-to-a-text-file
+# https://docs.blender.org/manual/en/latest/rigging/armatures/skinning/parenting.html
 
 enum_POSE_REST_t = str
 
@@ -35,6 +39,8 @@ class Outp:
             self.p(f'{f(x.row[1][0])} {f(x.row[1][1])} {f(x.row[1][2])} {f(x.row[1][3])}')
             self.p(f'{f(x.row[2][0])} {f(x.row[2][1])} {f(x.row[2][2])} {f(x.row[2][3])}')
             self.p(f'{f(x.row[3][0])} {f(x.row[3][1])} {f(x.row[3][2])} {f(x.row[3][3])}')
+        elif tx == tuple:
+            self.p(ps(*x, sep=' '))
         else:
             raise RuntimeError()
         return self
@@ -114,11 +120,17 @@ def _genloopidx(polygons: bpy.types.MeshPolygon):
         else:
             raise RuntimeError()
 
-def p(*args):
+def ps(*args, **kwargs):
+    ret = ''
+    sep = kwargs['sep'] if 'sep' in kwargs else ' | '
     if len(args):
         for x in range(len(args) - 1):
-            print(str(args[x]) + ' | ', end='')
-        print(str(args[len(args) - 1]))
+            ret += str(args[x]) + sep
+        ret += str(args[len(args) - 1]) + '\n'
+    return ret
+
+def p(*args, **kwargs):
+    print(ps(*args, **kwargs), end='')
 
 def _modl(meob: MeOb):
     # https://docs.blender.org/api/blender2.8/bpy.types.Mesh.html
@@ -126,9 +138,7 @@ def _modl(meob: MeOb):
     #   so the same polygon loop indices can be used to find
     #   the UV’s and vertex colors as with as the vertices.
     with WithSect('modl'), WithIdent():
-        g_o - 'name'
-        with WithIdent():
-            g_o - meob.m_mesh.name
+        g_o - ('name', meob.m_mesh.name)
         g_o - 'vert'
         with WithIdent():
             for l in _genloopidx(meob.m_mesh.polygons):
@@ -142,13 +152,25 @@ def _modl(meob: MeOb):
             for layr in meob.m_mesh.uv_layers:
                 g_o - 'layr'
                 with WithIdent():
-                    g_o - 'name'
-                    with WithIdent():
-                        g_o - layr.name
+                    g_o - ('name', layr.name)
                     g_o - 'vect'
                     with WithIdent():
                         for l in _genloopidx(meob.m_mesh.polygons):
                             g_o - layr.data[l].uv
+        g_o - 'weit'
+        with WithIdent():
+            map_idx_grp = {}
+            for v in meob.m_meso.vertex_groups:
+                map_idx_grp[v.index] = v
+            for l in _genloopidx(meob.m_mesh.polygons):
+                vertidx: int = meob.m_mesh.loops[l].vertex_index
+                vert: bpy.types.MeshVertex = meob.m_mesh.vertices[vertidx]
+                yes_affect: typing.List[bpy.types.VertexGroup] = [map_idx_grp[x.group] for x in vert.groups if x.group in map_idx_grp]
+                not_affect: typing.List[bpy.types.VertexGroup] = [map_idx_grp[x.group] for x in vert.groups if x.group not in map_idx_grp]
+                sor_affect: typing.List[bpy.types.VertexGroup] = sorted(yes_affect, key=lambda x: x.weight(vertidx), reverse=True)
+                lim_affect: typing.List[bpy.types.VertexGroup] = sor_affect[0:4]
+                p(vert.co, [x.name for x in lim_affect])
+               
 
 def _armt(meob: MeOb):
     with WithSect('armt'), WithIdent():
@@ -161,9 +183,7 @@ def _bone(meob: MeOb):
         for b in meob.m_armt.bones:
             g_o - 'bone'
             with WithIdent():
-                g_o - 'name'
-                with WithIdent():
-                    g_o - b.name
+                g_o - ('name', b.name)
                 g_o - 'matx'
                 with WithIdent():
                     for b in meob.m_armt.bones:
