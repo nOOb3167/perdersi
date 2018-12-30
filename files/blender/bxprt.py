@@ -17,7 +17,7 @@ class Outp:
         return self
     def __sub__(self, x):
         def f(x):
-            return format(x, ' 8.4')
+            return format(x, ' 8.4f')
         tx = type(x)
         if tx == str:
             self.p(x)
