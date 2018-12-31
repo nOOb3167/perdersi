@@ -27,10 +27,6 @@ def ps(*args, **kwargs):
 class Outp:
     def __init__(self):
         self.m_outlines = []
-    def __add__(self, other):
-        assert(type(other) == str)
-        p(f'section {other}')
-        return self
     def __sub__(self, x):
         def f(x):
             return format(x, ' 8.4f')
