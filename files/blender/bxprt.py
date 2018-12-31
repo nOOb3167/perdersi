@@ -1,5 +1,6 @@
 import bpy
 import mathutils
+import os.path
 import typing
 from dataclasses import dataclass as DATACLASSES_dataclass
 from functools import reduce as FUNCTOOLS_reduce
@@ -14,7 +15,18 @@ from pprint import pprint as pp
 
 enum_POSE_REST_t = str
 
+def ps(*args, **kwargs):
+    ret = ''
+    sep = kwargs['sep'] if 'sep' in kwargs else ' | '
+    if len(args):
+        for x in range(len(args) - 1):
+            ret += str(args[x]) + sep
+        ret += str(args[-1])
+    return ret
+
 class Outp:
+    def __init__(self):
+        self.m_outlines = []
     def __add__(self, other):
         assert(type(other) == str)
         p(f'section {other}')
@@ -46,10 +58,18 @@ class Outp:
         return self
     def p(self, x):
         assert(type(x) == str)
-        p(f'{self.ident()}' + x)
+        line = f'{self.ident()}' + x
+        self.m_outlines.append(line)
+        print(line)
     def ident(self):
         return ' ' * (self.m_ident * 4)
+    def write(self):
+        export_path = os.path.splitext(bpy.data.filepath)[0] + ".psmdl"
+        with open(file=export_path, mode='w', newline='\n') as f:
+            for v in self.m_outlines:
+                f.write(f'{v}\n')
     m_ident = 0
+    m_outlines = None
 g_o = Outp()
 
 class WithIdent:
@@ -62,15 +82,6 @@ class WithIdent:
         return self
     def __exit__(self, exc_type, exc_value, traceback):
         g_o.m_ident = self.m_old
-
-class WithSect:
-    def __init__(self, name: str):
-        self.m_name = name
-    def __enter__(self):
-        g_o + self.m_name
-        return self
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
 
 class WithPose:
     def __init__(self, armt: bpy.types.Armature, typ: enum_POSE_REST_t):
@@ -119,18 +130,6 @@ def _genloopidx(polygons: bpy.types.MeshPolygon):
             yield poly.loop_start + 3
         else:
             raise RuntimeError()
-
-def ps(*args, **kwargs):
-    ret = ''
-    sep = kwargs['sep'] if 'sep' in kwargs else ' | '
-    if len(args):
-        for x in range(len(args) - 1):
-            ret += str(args[x]) + sep
-        ret += str(args[len(args) - 1])
-    return ret
-
-def p(*args, **kwargs):
-    print(ps(*args, **kwargs))
 
 def _modl(meob: MeOb):
     # https://docs.blender.org/api/blender2.8/bpy.types.Mesh.html
@@ -189,6 +188,7 @@ def _run():
     _modl(meob)
     with WithPose(meob.m_armt, 'REST'):
         _armt(meob)
+    g_o.write()
 
 if __name__ == '__main__':
     _run()
