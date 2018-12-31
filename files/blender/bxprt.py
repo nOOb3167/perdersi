@@ -15,70 +15,6 @@ from pprint import pprint as pp
 
 enum_POSE_REST_t = str
 
-def ps(*args, **kwargs):
-    ret = ''
-    sep = kwargs['sep'] if 'sep' in kwargs else ' | '
-    if len(args):
-        for x in range(len(args) - 1):
-            ret += str(args[x]) + sep
-        ret += str(args[-1])
-    return ret
-
-class Outp:
-    def __init__(self):
-        self.m_outlines = []
-    def __sub__(self, x):
-        def f(x):
-            return format(x, ' 8.4f')
-        tx = type(x)
-        if tx == str:
-            self.p(x)
-        elif tx == int:
-            self.p(str(x))
-        elif tx == mathutils.Vector:
-            if len(x) == 2:
-                self.p(f'{f(x[0])} {f(x[1])}')
-            elif len(x) == 3:
-                self.p(f'{f(x[0])} {f(x[1])} {f(x[2])}')
-            else:
-                raise RuntimeError()
-        elif tx == mathutils.Matrix:
-            self.p(f'{f(x.row[0][0])} {f(x.row[0][1])} {f(x.row[0][2])} {f(x.row[0][3])}')
-            self.p(f'{f(x.row[1][0])} {f(x.row[1][1])} {f(x.row[1][2])} {f(x.row[1][3])}')
-            self.p(f'{f(x.row[2][0])} {f(x.row[2][1])} {f(x.row[2][2])} {f(x.row[2][3])}')
-            self.p(f'{f(x.row[3][0])} {f(x.row[3][1])} {f(x.row[3][2])} {f(x.row[3][3])}')
-        elif tx == tuple:
-            self.p(ps(*x, sep=' '))
-        else:
-            raise RuntimeError()
-        return self
-    def p(self, x):
-        assert(type(x) == str)
-        line = f'{self.ident()}' + x
-        self.m_outlines.append(line)
-        print(line)
-    def ident(self):
-        return ' ' * (self.m_ident * 4)
-    def write(self):
-        export_path = os.path.splitext(bpy.data.filepath)[0] + ".psmdl"
-        with open(file=export_path, mode='w', newline='\n') as f:
-            for v in self.m_outlines:
-                f.write(f'{v}\n')
-    m_ident = 0
-    m_outlines = None
-g_o = Outp()
-
-class WithIdent:
-    def __init__(self, ident: int = None):
-        self.m_ident = ident
-        self.m_old = None
-    def __enter__(self):
-        self.m_old: int = g_o.m_ident
-        g_o.m_ident = self.m_ident or g_o.m_ident + 1
-        return self
-    def __exit__(self, exc_type, exc_value, traceback):
-        g_o.m_ident = self.m_old
-
 class WithPose:
     def __init__(self, armt: bpy.types.Armature, typ: enum_POSE_REST_t):
         self.m_armt = armt
@@ -108,6 +44,10 @@ class MeOb:
         return meob
 
 def _genloopidx(polygons: bpy.types.MeshPolygon):
+    # https://docs.blender.org/api/blender2.8/bpy.types.Mesh.html
+    #   Mesh.loops, Mesh.uv_layers Mesh.vertex_colors are all aligned
+    #   so the same polygon loop indices can be used to find
+    #   the UV’s and vertex colors as with as the vertices.
     for poly in polygons:
         if poly.loop_total == 3:
             yield poly.loop_start + 0
@@ -127,64 +67,51 @@ def _genloopidx(polygons: bpy.types.MeshPolygon):
         else:
             raise RuntimeError()
 
-def _modl(meob: MeOb):
-    # https://docs.blender.org/api/blender2.8/bpy.types.Mesh.html
-    #   Mesh.loops, Mesh.uv_layers Mesh.vertex_colors are all aligned
-    #   so the same polygon loop indices can be used to find
-    #   the UV’s and vertex colors as with as the vertices.
-    g_o - ('modl', meob.m_mesh.name)
-    with WithIdent():
-        g_o - 'vert'
-        with WithIdent():
-            for l in _genloopidx(meob.m_mesh.polygons):
-                g_o - meob.m_mesh.vertices[meob.m_mesh.loops[l].vertex_index].co
-        g_o - 'indx'
-        with WithIdent():
-            g_o - tuple([x for x in range(len(list(_genloopidx(meob.m_mesh.polygons))))])
-        g_o - 'uvla'
-        with WithIdent():
-            for layr in meob.m_mesh.uv_layers:
-                g_o - ('layr', layr.name)
-                with WithIdent():
-                    for l in _genloopidx(meob.m_mesh.polygons):
-                        g_o - layr.data[l].uv
-        g_o - 'weit'
-        with WithIdent():
-            map_idx_grp = {v.index : v for v in meob.m_meso.vertex_groups}
-            for l in _genloopidx(meob.m_mesh.polygons):
-                vertidx: int = meob.m_mesh.loops[l].vertex_index
-                vert: bpy.types.MeshVertex = meob.m_mesh.vertices[vertidx]
-                yes_affect: typing.List[bpy.types.VertexGroup] = [map_idx_grp[x.group] for x in vert.groups if x.group in map_idx_grp]
-                not_affect: typing.List[bpy.types.VertexGroup] = [map_idx_grp[x.group] for x in vert.groups if x.group not in map_idx_grp]
-                sor_affect: typing.List[bpy.types.VertexGroup] = sorted(yes_affect, key=lambda x: x.weight(vertidx), reverse=True)
-                lim_affect: typing.List[bpy.types.VertexGroup] = sor_affect[0:4]
-                line = ''
-                for v in lim_affect:
-                    line += f'{v.name} {v.weight(vertidx)} '
-                for v in range(4 - len(lim_affect)):
-                    line += f'NONE 0.0 '
-                g_o - line.strip()
+def d_write(d: dict):
+    import json
+    export_path = os.path.splitext(bpy.data.filepath)[0] + ".psmdl"
+    with open(file=export_path, mode='w', newline='\n') as f:
+        json.dump(d, f, indent=4)
 
-def _armt(meob: MeOb):
-    g_o - ('armt', meob.m_armo.name)
-    with WithIdent():
-        g_o - 'matx'
-        with WithIdent():
-            g_o - meob.m_armo.matrix_world
-        g_o - 'bone'
-        with WithIdent():
-            for b in meob.m_armt.bones:
-                g_o - ('bone', b.name)
-                with WithIdent():
-                    for b in meob.m_armt.bones:
-                        g_o - b.matrix_local
+def v2(x: mathutils.Vector):
+    return [x[c] for c in range(len(x))]
+
+def m2(x: mathutils.Matrix):
+    return [x.row[r][c] for r in range(4) for c in range(4)]
+
+def _modl(d: dict, meob: MeOb):
+    d['modl'][meob.m_mesh.name] = {'vert':[], 'indx':[], 'uvla':{}, 'weit':[]}
+    d['modl'][meob.m_mesh.name]['vert'] = [v2(meob.m_mesh.vertices[meob.m_mesh.loops[x].vertex_index].co) for x in _genloopidx(meob.m_mesh.polygons)]
+    d['modl'][meob.m_mesh.name]['indx'] = [x for x in range(len(list(_genloopidx(meob.m_mesh.polygons))))]
+    for layr in meob.m_mesh.uv_layers:
+        d['modl'][meob.m_mesh.name]['uvla'][layr.name] = [v2(layr.data[x].uv) for x in _genloopidx(meob.m_mesh.polygons)]
+    map_idx_grp = {v.index : v for v in meob.m_meso.vertex_groups}
+    for l in _genloopidx(meob.m_mesh.polygons):
+        vertidx: int = meob.m_mesh.loops[l].vertex_index
+        vert: bpy.types.MeshVertex = meob.m_mesh.vertices[vertidx]
+        yes_affect: typing.List[bpy.types.VertexGroup] = [map_idx_grp[x.group] for x in vert.groups if x.group in map_idx_grp]
+        not_affect: typing.List[bpy.types.VertexGroup] = [map_idx_grp[x.group] for x in vert.groups if x.group not in map_idx_grp]
+        sor_affect: typing.List[bpy.types.VertexGroup] = sorted(yes_affect, key=lambda x: x.weight(vertidx), reverse=True)
+        lim_affect: typing.List[bpy.types.VertexGroup] = sor_affect[0:4]
+        if len(lim_affect):
+            for v in lim_affect:
+                d['modl'][meob.m_mesh.name]['weit'].append([v.name, v.weight(vertidx)])
+        else:
+            d['modl'][meob.m_mesh.name]['weit'].append([])
+
+def _armt(d: dict, meob: MeOb):
+    d['armt'][meob.m_armo.name] = {'matx':[], 'bone':{}}
+    d['armt'][meob.m_armo.name]['matx'] = m2(meob.m_armo.matrix_world)
+    for b in meob.m_armt.bones:
+        d['armt'][meob.m_armo.name]['bone'][b.name] = m2(b.matrix_local)
 
 def _run():
+    d = {'modl':{}, 'armt':{}}
     meob: MeOb = MeOb.meob(bpy.data.meshes[0])
-    _modl(meob)
+    _modl(d, meob)
     with WithPose(meob.m_armt, 'REST'):
-        _armt(meob)
-    g_o.write()
+        _armt(d, meob)
+    d_write(d)
 
 if __name__ == '__main__':
     _run()
