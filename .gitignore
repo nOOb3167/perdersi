@@ -9,3 +9,5 @@
 /ansible/sepol/reload.stamp
 /ansible/sepol/tmp
 
+*.blend
+*.blend1
