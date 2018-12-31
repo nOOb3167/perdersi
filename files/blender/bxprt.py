@@ -126,37 +126,33 @@ def ps(*args, **kwargs):
     if len(args):
         for x in range(len(args) - 1):
             ret += str(args[x]) + sep
-        ret += str(args[len(args) - 1]) + '\n'
+        ret += str(args[len(args) - 1])
     return ret
 
 def p(*args, **kwargs):
-    print(ps(*args, **kwargs), end='')
+    print(ps(*args, **kwargs))
 
 def _modl(meob: MeOb):
     # https://docs.blender.org/api/blender2.8/bpy.types.Mesh.html
     #   Mesh.loops, Mesh.uv_layers Mesh.vertex_colors are all aligned
     #   so the same polygon loop indices can be used to find
     #   the UV’s and vertex colors as with as the vertices.
-    with WithSect('modl'), WithIdent():
-        g_o - ('name', meob.m_mesh.name)
+    g_o - ('modl', meob.m_mesh.name)
+    with WithIdent():
         g_o - 'vert'
         with WithIdent():
             for l in _genloopidx(meob.m_mesh.polygons):
                 g_o - meob.m_mesh.vertices[meob.m_mesh.loops[l].vertex_index].co
         g_o - 'indx'
         with WithIdent():
-            for v in range(len(list(_genloopidx(meob.m_mesh.polygons)))):
-                g_o - v
-        g_o - 'uv'
+            g_o - tuple([x for x in range(len(list(_genloopidx(meob.m_mesh.polygons))))])
+        g_o - 'uvla'
         with WithIdent():
             for layr in meob.m_mesh.uv_layers:
-                g_o - 'layr'
+                g_o - ('layr', layr.name)
                 with WithIdent():
-                    g_o - ('name', layr.name)
-                    g_o - 'vect'
-                    with WithIdent():
-                        for l in _genloopidx(meob.m_mesh.polygons):
-                            g_o - layr.data[l].uv
+                    for l in _genloopidx(meob.m_mesh.polygons):
+                        g_o - layr.data[l].uv
         g_o - 'weit'
         with WithIdent():
             map_idx_grp = {v.index : v for v in meob.m_meso.vertex_groups}
@@ -175,18 +171,15 @@ def _modl(meob: MeOb):
                 g_o - line.strip()
 
 def _armt(meob: MeOb):
-    with WithSect('armt'), WithIdent():
+    g_o - ('armt', meob.m_armo.name)
+    with WithIdent():
         g_o - 'matx'
         with WithIdent():
             g_o - meob.m_armo.matrix_world
-
-def _bone(meob: MeOb):
-    with WithSect('bone'), WithIdent():
-        for b in meob.m_armt.bones:
-            g_o - 'bone'
-            with WithIdent():
-                g_o - ('name', b.name)
-                g_o - 'matx'
+        g_o - 'bone'
+        with WithIdent():
+            for b in meob.m_armt.bones:
+                g_o - ('bone', b.name)
                 with WithIdent():
                     for b in meob.m_armt.bones:
                         g_o - b.matrix_local
@@ -196,7 +189,6 @@ def _run():
     _modl(meob)
     with WithPose(meob.m_armt, 'REST'):
         _armt(meob)
-        _bone(meob)
 
 if __name__ == '__main__':
     _run()
