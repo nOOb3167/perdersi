@@ -159,9 +159,7 @@ def _modl(meob: MeOb):
                             g_o - layr.data[l].uv
         g_o - 'weit'
         with WithIdent():
-            map_idx_grp = {}
-            for v in meob.m_meso.vertex_groups:
-                map_idx_grp[v.index] = v
+            map_idx_grp = {v.index : v for v in meob.m_meso.vertex_groups}
             for l in _genloopidx(meob.m_mesh.polygons):
                 vertidx: int = meob.m_mesh.loops[l].vertex_index
                 vert: bpy.types.MeshVertex = meob.m_mesh.vertices[vertidx]
@@ -169,8 +167,12 @@ def _modl(meob: MeOb):
                 not_affect: typing.List[bpy.types.VertexGroup] = [map_idx_grp[x.group] for x in vert.groups if x.group not in map_idx_grp]
                 sor_affect: typing.List[bpy.types.VertexGroup] = sorted(yes_affect, key=lambda x: x.weight(vertidx), reverse=True)
                 lim_affect: typing.List[bpy.types.VertexGroup] = sor_affect[0:4]
-                p(vert.co, [x.name for x in lim_affect])
-               
+                line = ''
+                for v in lim_affect:
+                    line += f'{v.name} {v.weight(vertidx)} '
+                for v in range(4 - len(lim_affect)):
+                    line += f'NONE 0.0 '
+                g_o - line.strip()
 
 def _armt(meob: MeOb):
     with WithSect('armt'), WithIdent():
