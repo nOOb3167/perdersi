@@ -109,12 +109,16 @@ add_executable(tupdater3 ${PS_RCS} src/tupdater.cpp)
 target_link_libraries(tupdater3 PUBLIC common)
 target_compile_definitions(tupdater3 PUBLIC _PS_DEBUG_TUPDATER=3)
 
+add_executable(mdlpar ${PS_RCS} src/mdlpar.cpp ps_b1.h)
+target_link_libraries(mdlpar PUBLIC common)
+
 find_package(Python3 REQUIRED)
 set(PYPATH "PYTHONPATH=${CMAKE_BINARY_DIR}${SEP}${CMAKE_SOURCE_DIR}/files")
 
 PS_UTIL_CONVERT_SVG_PNG(${CMAKE_SOURCE_DIR}/data/test00.svg test00.png)
 PS_UTIL_GENERATE_HEADER(test00.png ps_data_test00.h)
 PS_UTIL_GENERATE_HEADER(${CMAKE_SOURCE_DIR}/files/server.py ps_data_dummy.h)
+PS_UTIL_GENERATE_HEADER(${CMAKE_SOURCE_DIR}/files/blender/b1.psmdl ps_b1.h)
 
 add_custom_command(
 	COMMENT "Generating Config Header (ps_config_updater.h)"
