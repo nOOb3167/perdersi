@@ -3,13 +3,21 @@
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
 
+// GRRR
+#include <psasio.hpp>
+
 #include <boost/regex.hpp>
+#include <GL/glew.h>
+#include <SFML/Graphics.hpp>
+#include <SFML/OpenGL.hpp>
+#include <SFML/Window.hpp>
 
 #include <pscruft.hpp>
 #include <ps_b1.h>
@@ -35,18 +43,35 @@ public:
 	inline PaExc() : std::runtime_error("PaExc") {}
 };
 
-class Bone
+class PaBone
 {
 public:
+	inline PaBone(const std::string &name, const std::vector<float> &matx) :
+		m_name(name),
+		m_matx(matx)
+	{}
+
 	std::string m_name;
 	std::vector<float> m_matx;
 };
 
-class UvLa
+class PaUvLa
 {
 public:
+	inline PaUvLa(const std::string &name, const std::vector<float> &layr) :
+		m_name(name),
+		m_layr(layr)
+	{}
+
 	std::string m_name;
 	std::vector<float> m_layr;
+};
+
+class PaWeit
+{
+public:
+	std::vector<uint32_t> m_id;
+	std::vector<float> m_wt;
 };
 
 class PaModl
@@ -55,15 +80,26 @@ public:
 	std::string m_name;
 	std::vector<float> m_vert;
 	std::vector<uint32_t> m_indx;
-	std::vector<UvLa> m_uvla;
+	std::vector<PaUvLa> m_uvla;
 	std::vector<weit_t> m_weit;
 };
 
 class PaArmt
 {
 public:
+	std::string m_name;
 	std::vector<float> m_matx;
-	std::vector<Bone> m_bone;
+	std::vector<PaBone> m_bone;
+};
+
+class PaXtra
+{
+public:
+	std::map<std::string, uint32_t> m_map_str;
+	std::map<uint32_t, std::string> m_map_int;
+
+	std::vector<uint32_t> m_id;
+	std::vector<float> m_wt;
 };
 
 class Pa
@@ -80,12 +116,40 @@ public:
 	_vec(const pt_t &node, size_t vecsizehint)
 	{
 		std::vector<float> v;
-		for (auto it = node.ordered_begin(); it != node.not_found(); ++it) {
-			assert(it->second.size() == vecsizehint);
-			for (auto it2 = it->second.ordered_begin(); it2 != it->second.not_found(); ++it2)
-				v.push_back(std::stof(it2->second.data()));
-		}
+		assert(node.size() == vecsizehint);
+		for (auto it = node.ordered_begin(); it != node.not_found(); ++it)
+			v.push_back(std::stof(it->second.data()));
 		return v;
+	}
+
+	inline std::vector<float>
+	_vecflatten(const pt_t &node, size_t vecsizehint)
+	{
+		std::vector<float> v;
+		for (auto it = node.ordered_begin(); it != node.not_found(); ++it)
+			for (const auto &x : _vec(it->second, vecsizehint))
+				v.push_back(x);
+		return v;
+	}
+
+	weit_t
+	_iterweit(pt_t::const_assoc_iterator &it)
+	{
+		std::string a = (it++)->second.data();
+		float b = std::stof((it++)->second.data());
+		return weit_t(a, b);
+	}
+
+	inline void
+	_bone_name_map(const PaArmt &armt, std::map<std::string, uint32_t> &map_str, std::map<uint32_t, std::string> &map_int)
+	{
+		size_t idx = 0;
+		map_str["NONE"] = -1;
+		for (const PaBone &b : armt.m_bone)
+			map_str[b.m_name] = idx++;
+		for (auto &[k, v] : map_str)
+			map_int[v] = k;
+		assert(1 + armt.m_bone.size() == map_str.size());
 	}
 
 	inline sp<PaModl>
@@ -99,24 +163,54 @@ public:
 		const pt_t &weit = modl.get_child("weit");
 		sp<PaModl> q(new PaModl());
 		q->m_name = modl_.begin()->first;
-		q->m_vert = _vec(vert, 3);
+		q->m_vert = _vecflatten(vert, 3);
 		for (auto it = indx.ordered_begin(); it != indx.not_found(); ++it)
 			q->m_indx.push_back(std::stol(it->second.data()));
-		for (auto it = uvla.ordered_begin(); it != uvla.not_found(); ++it) {
-			UvLa uvla;
-			uvla.m_name = it->first;
-			uvla.m_layr = _vec(it->second, 2);
-			q->m_uvla.push_back(std::move(uvla));
-		}
+		for (auto it = uvla.ordered_begin(); it != uvla.not_found(); ++it)
+			q->m_uvla.push_back(PaUvLa(it->first, _vecflatten(it->second, 2)));
 		for (auto it = weit.ordered_begin(); it != weit.not_found(); ++it) {
 			assert(it->second.size() % 2 == 0);
-			for (auto it2 = it->second.ordered_begin(); it2 != it->second.not_found(); ++it2) {
-				auto it2_ = it2++;
-				q->m_weit.push_back(weit_t(it2_->second.data(), std::stof(it2->second.data())));
-			}
+			for (auto it2 = it->second.ordered_begin(); it2 != it->second.not_found(); /*dummy*/)
+				q->m_weit.push_back(_iterweit(it2));
 			for (size_t i = it->second.size() / 2; i < 4; i++)
 				q->m_weit.push_back(weit_t("NONE", 0.0f));
 		}
+		return q;
+	}
+
+	inline sp<PaArmt>
+	_armt(const pt_t &armt_)
+	{
+		assert(armt_.size() == 1);
+		const pt_t &armt = armt_.begin()->second;
+		const pt_t &matx = armt.get_child("matx");
+		const pt_t &bone = armt.get_child("bone");
+		sp<PaArmt> q(new PaArmt());
+		q->m_name = armt_.begin()->first;
+		q->m_matx = _vec(matx, 4*4);
+		for (auto it = bone.ordered_begin(); it != bone.not_found(); ++it)
+			q->m_bone.push_back(PaBone(it->first, _vec(it->second, 4*4)));
+		return q;
+	}
+
+	inline sp<PaXtra>
+	_xtra(const PaModl &modl, const PaArmt &armt)
+	{
+		sp<PaXtra> q(new PaXtra());
+		size_t idx = 0;
+		
+		q->m_map_str["NONE"] = -1;
+		for (const PaBone &b : armt.m_bone)
+			q->m_map_str[b.m_name] = idx++;
+		for (auto &[k, v] : q->m_map_str)
+			q->m_map_int[v] = k;
+		assert(1 + armt.m_bone.size() == q->m_map_str.size());
+
+		for (const weit_t &w : modl.m_weit) {
+			q->m_id.push_back(q->m_map_str[std::get<0>(w)]);
+			q->m_wt.push_back(std::get<1>(w));
+		}
+
 		return q;
 	}
 
@@ -124,15 +218,29 @@ public:
 	pars()
 	{
 		sp<PaModl> modl(_modl(m_pt.get_child("modl")));
+		sp<PaArmt> armt(_armt(m_pt.get_child("armt")));
+		sp<PaXtra> xtra(_xtra(*modl, *armt));
+		m_modl = modl;
+		m_armt = armt;
+		m_xtra = xtra;
 	}
 
 	std::string m_s;
 	pt_t m_pt;
+
+	sp<PaModl> m_modl;
+	sp<PaArmt> m_armt;
+	sp<PaXtra> m_xtra;
 };
 
-int main(int argc, char **argv)
+void stuff()
 {
 	sp<Pa> pars(new Pa(std::string((char *)g_ps_b1, g_ps_b1_size)));
 	pars->pars();
+}
+
+int main(int argc, char **argv)
+{
+	stuff();
 	return EXIT_SUCCESS;
 }
