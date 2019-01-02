@@ -237,6 +237,83 @@ void stuff()
 {
 	sp<Pa> pars(new Pa(std::string((char *)g_ps_b1, g_ps_b1_size)));
 	pars->pars();
+
+	sf::RenderWindow win(sf::VideoMode(800, 600), "");
+
+	if (glewInit() != GLEW_OK)
+		throw PaExc();
+
+	sf::Shader sha;
+
+	std::string sha_vs = R"EOF(
+#version 440
+layout(location = 0) in vec3 vert;
+void main()
+{
+	gl_Position = vec4(vert.xyz, 1);
+}
+)EOF";
+
+	std::string sha_fs = R"EOF(
+#version 440
+layout(location = 0) out vec4 color;
+void main()
+{
+	color = vec4(1,0,0,0);
+}
+)EOF";
+
+	if (!sha.loadFromMemory(sha_vs, sha_fs))
+		throw PaExc();
+
+	GLuint vao = 0;
+	std::vector<GLuint> vbo(1);
+
+	// https://github.com/SFML/SFML/blob/master/src/SFML/Graphics/RenderTarget.cpp#L482
+	//   RenderTarget::resetGLStates()
+	glDisableClientState(GL_VERTEX_ARRAY);
+
+	glGenVertexArrays(1, &vao);
+	glGenBuffers(vbo.size(), vbo.data());
+
+	glBindVertexArray(vao);
+	{
+		glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+		{
+			glBufferData(GL_ARRAY_BUFFER, pars->m_modl->m_vert.size() * 4, pars->m_modl->m_vert.data(), GL_STATIC_DRAW);
+
+			glBindVertexBuffer(0, vbo[0], 0, 3 * 4);
+			glVertexAttribFormat(0, 3, GL_FLOAT, GL_FALSE, 0);
+			glVertexAttribBinding(0, 0);
+
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, nullptr);
+		}
+	}
+
+	while (win.isOpen()) {
+		sf::Event event;
+		while (win.pollEvent(event)) {
+			if (event.type == sf::Event::Closed)
+				goto end;
+		}
+		win.clear(sf::Color(255, 255, 0));
+		{
+			glBindVertexArray(vao);
+			{
+				sf::Shader::bind(&sha);
+				glDrawArrays(GL_TRIANGLES, 0, 12 * 3);
+				sf::Shader::bind(nullptr);
+			}
+			glBindVertexArray(0);
+
+			win.pushGLStates();
+			win.popGLStates();
+		}
+		win.display();
+	}
+end:
+	(void)0;
 }
 
 int main(int argc, char **argv)
