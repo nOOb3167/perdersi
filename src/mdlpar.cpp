@@ -260,6 +260,25 @@ void _perspective(M4f &m, float left, float right, float bottom, float top, floa
 		 0, 0, -1, 0;
 }
 
+void _lookat(M4f &m, const V3f &eye, const V3f &cen, const V3f &up)
+{
+	V3f f = (cen - eye).normalized();
+	V3f u_ = up.normalized();
+	V3f s = f.cross(u_);
+	V3f u = s.cross(f);
+	// https://www.cs.auckland.ac.nz/courses/compsci716s2t/resources/manpagesOpenGL/gluLookAt.html
+	// https://math.stackexchange.com/questions/2145611/inverse-of-an-orthogonal-matrix-is-its-transpose/2145626
+	//   remember that transpose is orthogonal inverse
+	M4f q(M4f::Identity());
+	q << s.x(), s.y(), s.z(), 0,
+		 u.x(), u.y(), u.z(), 0,
+		 -f.x(), -f.y(), -f.z(), 0,
+		 0, 0, 0, 1;
+	A3f trns(A3f::Identity());
+	trns.translate(V3f(-eye.x(), -eye.y(), -eye.z()));
+	m = q * trns.matrix();
+}
+
 void stuff()
 {
 	sp<Pa> pars(new Pa(std::string((char *)g_ps_b1, g_ps_b1_size)));
@@ -275,10 +294,11 @@ void stuff()
 	std::string sha_vs = R"EOF(
 #version 440
 layout(location = 0) in vec3 vert;
+uniform mat4 view;
 uniform mat4 proj;
 void main()
 {
-	gl_Position = proj * vec4(vert.xyz, 1);
+	gl_Position = proj * view * vec4(vert.xyz, 1);
 }
 )EOF";
 
@@ -295,11 +315,15 @@ void main()
 		throw PaExc();
 
 	float idx = 0.1;
-	A3f rot(A3f::Identity());
-	rot.rotate(ei::AngleAxisf(idx * PS_PI, V3f::UnitX()));
+	A3f horz_rot(A3f::Identity());
+	horz_rot.rotate(ei::AngleAxisf(idx * PS_PI, V3f::UnitY()));
 
 	M4f proj;
-	_perspective(proj, -5, 5, -5, 5, 0.01, 10);
+	_perspective(proj, -1, 1, -1, 1, 1, 10);
+
+	V3f eye_pt(0, 0, 5);
+	M4f view;
+	_lookat(view, eye_pt, V3f(0, 0, 0), V3f(0, 1, 0));
 
 	GLuint vao = 0;
 	std::vector<GLuint> vbo(1);
@@ -338,6 +362,7 @@ void main()
 			{
 				sf::Shader::bind(&sha);
 				sha.setUniform("proj", sf::Glsl::Mat4(proj.data()));
+				sha.setUniform("view", sf::Glsl::Mat4(view.data()));
 				glDrawArrays(GL_TRIANGLES, 0, pars->m_modl->m_indx.size());
 				sf::Shader::bind(nullptr);
 			}
