@@ -76,8 +76,9 @@ def d_write(d: dict):
 def v2(x: mathutils.Vector):
     return [x[c] for c in range(len(x))]
 
+# column-major
 def m2(x: mathutils.Matrix):
-    return [x.row[r][c] for r in range(4) for c in range(4)]
+    return [x.col[c][r] for c in range(4) for r in range(4)]
 
 def _modl(d: dict, meob: MeOb):
     d['modl'][meob.m_mesh.name] = {'vert':[], 'indx':[], 'uvla':{}, 'weit':[]}

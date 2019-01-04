@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -14,6 +15,7 @@
 #include <psasio.hpp>
 
 #include <boost/regex.hpp>
+#include <Eigen/Dense>
 #include <GL/glew.h>
 #include <SFML/Graphics.hpp>
 #include <SFML/OpenGL.hpp>
@@ -22,7 +24,13 @@
 #include <pscruft.hpp>
 #include <ps_b1.h>
 
-#define N0 n0()
+const float PS_PI = 3.14159265358979323846;
+
+// https://eigen.tuxfamily.org/dox/group__TutorialGeometry.html
+//   If you are working with OpenGL 4x4 matrices then Affine3f and Affine3d are what you want.
+//   Since Eigen defaults to column-major storage, you can directly use the Transform::data() method to pass your transformation matrix to OpenGL.
+
+namespace ei = ::Eigen;
 
 template<typename T>
 using sp = ::std::shared_ptr<T>;
@@ -30,6 +38,11 @@ using sp = ::std::shared_ptr<T>;
 using st = size_t;
 
 using weit_t = std::tuple<std::string, float>;
+
+using A3f = ::ei::Transform<float, 3, ei::Affine, ei::DontAlign>;
+using M4f = ::ei::Matrix<float, 4, 4, ei::DontAlign>;
+using Mp4f = ::ei::Map<::ei::Matrix<float, 4, 4, ei::DontAlign> >;
+using V3f = ::ei::Matrix<float, 3, 1, ei::DontAlign>;
 
 enum PaLvl
 {
@@ -233,6 +246,20 @@ public:
 	sp<PaXtra> m_xtra;
 };
 
+void _perspective(M4f &m, float left, float right, float bottom, float top, float _near, float _far)
+{
+	float A = (right + left) / (right - left);
+	float B = (top + bottom) / (top - bottom);
+	float C = - (_far + _near) / (_far - _near);
+	float D = - (2 * _far * _near) / (_far - _near);
+	float X = (2 * _near) / (right - left);
+	float Y = (2 * _near) / (top - bottom);
+	m << X, 0, A, 0,
+		 0, Y, B, 0,
+		 0, 0, C, D,
+		 0, 0, -1, 0;
+}
+
 void stuff()
 {
 	sp<Pa> pars(new Pa(std::string((char *)g_ps_b1, g_ps_b1_size)));
@@ -248,16 +275,10 @@ void stuff()
 	std::string sha_vs = R"EOF(
 #version 440
 layout(location = 0) in vec3 vert;
-vec3 loc[] = {
-vec3(0,0,0),
-vec3(1,0,0),
-vec3(1,1,0)
-};
+uniform mat4 proj;
 void main()
 {
-	int b = gl_VertexID % 3;
-	//gl_Position = vec4(loc[b], 1);
-	gl_Position = vec4(vert.xyz * 0.3, 1);
+	gl_Position = proj * vec4(vert.xyz, 1);
 }
 )EOF";
 
@@ -273,6 +294,13 @@ void main()
 	if (!sha.loadFromMemory(sha_vs, sha_fs))
 		throw PaExc();
 
+	float idx = 0.1;
+	A3f rot(A3f::Identity());
+	rot.rotate(ei::AngleAxisf(idx * PS_PI, V3f::UnitX()));
+
+	M4f proj;
+	_perspective(proj, -5, 5, -5, 5, 0.01, 10);
+
 	GLuint vao = 0;
 	std::vector<GLuint> vbo(1);
 
@@ -280,19 +308,13 @@ void main()
 	glGenBuffers(vbo.size(), vbo.data());
 
 	glBindVertexArray(vao);
-	{
-		glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
-		{
-			glBufferData(GL_ARRAY_BUFFER, pars->m_modl->m_vert.size() * sizeof(float), pars->m_modl->m_vert.data(), GL_STATIC_DRAW);
-
-			glEnableVertexAttribArray(0);
-			glBindVertexBuffer(0, vbo[0], 0, 3 * sizeof(float));
-			glVertexAttribFormat(0, 3, GL_FLOAT, GL_FALSE, 0);
-			glVertexAttribBinding(0, 0);
-			//glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, nullptr);
-		}
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-	}
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+		glBufferData(GL_ARRAY_BUFFER, pars->m_modl->m_vert.size() * sizeof(float), pars->m_modl->m_vert.data(), GL_STATIC_DRAW);
+		glEnableVertexAttribArray(0);
+		glBindVertexBuffer(0, vbo[0], 0, 3 * sizeof(float));
+		glVertexAttribFormat(0, 3, GL_FLOAT, GL_FALSE, 0);
+		glVertexAttribBinding(0, 0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
 
 	while (win.isOpen()) {
@@ -315,6 +337,7 @@ void main()
 			glBindVertexArray(vao);
 			{
 				sf::Shader::bind(&sha);
+				sha.setUniform("proj", sf::Glsl::Mat4(proj.data()));
 				glDrawArrays(GL_TRIANGLES, 0, pars->m_modl->m_indx.size());
 				sf::Shader::bind(nullptr);
 			}
