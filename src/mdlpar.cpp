@@ -3,12 +3,14 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <chrono>
 #include <deque>
 #include <map>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 
 // GRRR
@@ -284,7 +286,8 @@ void stuff()
 	sp<Pa> pars(new Pa(std::string((char *)g_ps_b1, g_ps_b1_size)));
 	pars->pars();
 
-	sf::RenderWindow win(sf::VideoMode(800, 600), "");
+	sf::ContextSettings ctx(24);
+	sf::RenderWindow win(sf::VideoMode(800, 600), "", sf::Style::Default, ctx);
 
 	if (glewInit() != GLEW_OK)
 		throw PaExc();
@@ -296,34 +299,34 @@ void stuff()
 layout(location = 0) in vec3 vert;
 uniform mat4 view;
 uniform mat4 proj;
+out vec3 bary;
 void main()
 {
+	bary = vec3((gl_VertexID + 0) % 3 == 0, (gl_VertexID - 1) % 3 == 0, (gl_VertexID - 2) % 3 == 0);
 	gl_Position = proj * view * vec4(vert.xyz, 1);
 }
 )EOF";
 
 	std::string sha_fs = R"EOF(
 #version 440
+in vec3 bary;
 layout(location = 0) out vec4 color;
 void main()
 {
-	color = vec4(1,0,0,0);
+	color = bary.x < 0.05 || bary.y < 0.05 || bary.z < 0.05 ? vec4(1,0,0,1) : vec4(0,1,0,1);
 }
 )EOF";
 
 	if (!sha.loadFromMemory(sha_vs, sha_fs))
 		throw PaExc();
 
-	float idx = 0.1;
 	A3f horz_rot(A3f::Identity());
-	horz_rot.rotate(ei::AngleAxisf(idx * PS_PI, V3f::UnitY()));
+	horz_rot.rotate(ei::AngleAxisf(0.01 * PS_PI, V3f::UnitY()));
 
 	M4f proj;
 	_perspective(proj, -1, 1, -1, 1, 1, 10);
 
 	V3f eye_pt(0, 0, 5);
-	M4f view;
-	_lookat(view, eye_pt, V3f(0, 0, 0), V3f(0, 1, 0));
 
 	GLuint vao = 0;
 	std::vector<GLuint> vbo(1);
@@ -341,6 +344,8 @@ void main()
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
 
+	auto timn = std::chrono::system_clock::now();
+
 	while (win.isOpen()) {
 		sf::Event event;
 		while (win.pollEvent(event)) {
@@ -349,8 +354,18 @@ void main()
 		}
 		//win.clear(sf::Color(255, 255, 0));
 		{
+			M4f view;
+			auto tim_ = std::chrono::system_clock::now();
+			if (std::chrono::duration_cast<std::chrono::milliseconds>(tim_ - timn).count() >= 50) {
+				eye_pt = (horz_rot * eye_pt).eval();
+				timn = tim_;
+			}
+			_lookat(view, eye_pt, V3f(0, 0, 0), V3f(0, 1, 0));
+
 			glClearColor(1, 1, 0, 1);
-			glClear(GL_COLOR_BUFFER_BIT);
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			
+			glEnable(GL_DEPTH_TEST);
 
 			// https://github.com/SFML/SFML/blob/master/src/SFML/Graphics/RenderTarget.cpp#L482
 			//   RenderTarget::resetGLStates()
