@@ -289,6 +289,9 @@ void stuff()
 	sf::ContextSettings ctx(24);
 	sf::RenderWindow win(sf::VideoMode(800, 600), "", sf::Style::Default, ctx);
 
+	if (win.getSettings().majorVersion < 4 || (win.getSettings().majorVersion == 4 && win.getSettings().minorVersion < 5))
+		throw PaExc();
+
 	if (glewInit() != GLEW_OK)
 		throw PaExc();
 
@@ -330,9 +333,6 @@ void main()
 
 	GLuint vao = 0;
 	std::vector<GLuint> vbo(1);
-
-	if (!GLEW_ARB_direct_state_access)
-		throw PaExc();
 
 	glCreateBuffers(vbo.size(), vbo.data());
 	glNamedBufferData(vbo[0], pars->m_modl->m_vert.size() * sizeof(float), pars->m_modl->m_vert.data(), GL_STATIC_DRAW);
