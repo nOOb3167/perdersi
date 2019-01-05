@@ -331,18 +331,17 @@ void main()
 	GLuint vao = 0;
 	std::vector<GLuint> vbo(1);
 
-	glGenVertexArrays(1, &vao);
-	glGenBuffers(vbo.size(), vbo.data());
+	if (!GLEW_ARB_direct_state_access)
+		throw PaExc();
 
-	glBindVertexArray(vao);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
-		glBufferData(GL_ARRAY_BUFFER, pars->m_modl->m_vert.size() * sizeof(float), pars->m_modl->m_vert.data(), GL_STATIC_DRAW);
-		glEnableVertexAttribArray(0);
-		glBindVertexBuffer(0, vbo[0], 0, 3 * sizeof(float));
-		glVertexAttribFormat(0, 3, GL_FLOAT, GL_FALSE, 0);
-		glVertexAttribBinding(0, 0);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glBindVertexArray(0);
+	glCreateBuffers(vbo.size(), vbo.data());
+	glNamedBufferData(vbo[0], pars->m_modl->m_vert.size() * sizeof(float), pars->m_modl->m_vert.data(), GL_STATIC_DRAW);
+
+	glCreateVertexArrays(1, &vao);
+	glEnableVertexArrayAttrib(vao, 0);
+	glVertexArrayVertexBuffer(vao, 0, vbo[0], 0, 3 * sizeof(float));
+	glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
+	glVertexArrayAttribBinding(vao, 0, 0);
 
 	auto timn = std::chrono::system_clock::now();
 
@@ -352,7 +351,6 @@ void main()
 			if (event.type == sf::Event::Closed)
 				goto end;
 		}
-		//win.clear(sf::Color(255, 255, 0));
 		{
 			M4f view;
 			auto tim_ = std::chrono::system_clock::now();
@@ -373,15 +371,13 @@ void main()
 			glDisableClientState(GL_COLOR_ARRAY);
 			glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 
+			sf::Shader::bind(&sha);
+			sha.setUniform("proj", sf::Glsl::Mat4(proj.data()));
+			sha.setUniform("view", sf::Glsl::Mat4(view.data()));
 			glBindVertexArray(vao);
-			{
-				sf::Shader::bind(&sha);
-				sha.setUniform("proj", sf::Glsl::Mat4(proj.data()));
-				sha.setUniform("view", sf::Glsl::Mat4(view.data()));
-				glDrawArrays(GL_TRIANGLES, 0, pars->m_modl->m_indx.size());
-				sf::Shader::bind(nullptr);
-			}
+			glDrawArrays(GL_TRIANGLES, 0, pars->m_modl->m_indx.size());
 			glBindVertexArray(0);
+			sf::Shader::bind(nullptr);
 
 			//win.pushGLStates();
 			//win.popGLStates();
