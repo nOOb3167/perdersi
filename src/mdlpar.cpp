@@ -373,12 +373,11 @@ void main()
 				goto end;
 		}
 		{
-			M4f view;
-			auto tim_ = std::chrono::system_clock::now();
-			if (std::chrono::duration_cast<std::chrono::milliseconds>(tim_ - timn).count() >= 50) {
+			if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - timn).count() >= 50) {
 				eye_pt = (horz_rot * eye_pt).eval();
-				timn = tim_;
+				timn = std::chrono::system_clock::now();
 			}
+			M4f view;
 			_lookat(view, eye_pt, V3f(0, 0, 0), V3f(0, 1, 0));
 
 			glClearColor(1, 1, 0, 1);
@@ -392,9 +391,8 @@ void main()
 			glDisableClientState(GL_COLOR_ARRAY);
 			glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 
-			Mp4f mp_proj(colr.proj), mp_view(colr.view);
-			mp_proj = proj;
-			mp_view = view;
+			Mp4f(colr.proj) = proj;
+			Mp4f(colr.view) = view;
 			glNamedBufferData(vbo[1], sizeof colr, &colr, GL_STATIC_DRAW);
 
 			sf::Shader::bind(&sha);
