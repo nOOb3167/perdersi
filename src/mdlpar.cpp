@@ -31,6 +31,7 @@ const float PS_PI = 3.14159265358979323846;
 // https://eigen.tuxfamily.org/dox/group__TutorialGeometry.html
 //   If you are working with OpenGL 4x4 matrices then Affine3f and Affine3d are what you want.
 //   Since Eigen defaults to column-major storage, you can directly use the Transform::data() method to pass your transformation matrix to OpenGL.
+// GL_UNIFORM_BUFFER bindings are NOT VAO STATE
 
 namespace ei = ::Eigen;
 
@@ -298,22 +299,32 @@ void stuff()
 	sf::Shader sha;
 
 	std::string sha_vs = R"EOF(
-#version 440
+#version 460
 layout(location = 0) in vec3 vert;
-uniform mat4 view;
-uniform mat4 proj;
 out vec3 bary;
+layout(binding = 0, std140) uniform Ubo0
+{
+	vec4 colr;
+	mat4 proj;
+	mat4 view;
+} ubo0;
 void main()
 {
 	bary = vec3((gl_VertexID + 0) % 3 == 0, (gl_VertexID - 1) % 3 == 0, (gl_VertexID - 2) % 3 == 0);
-	gl_Position = proj * view * vec4(vert.xyz, 1);
+	gl_Position = ubo0.proj * ubo0.view * vec4(vert.xyz, 1);
 }
 )EOF";
 
 	std::string sha_fs = R"EOF(
-#version 440
+#version 460
 in vec3 bary;
 layout(location = 0) out vec4 color;
+layout(binding = 0, std140) uniform Ubo0
+{
+	vec4 colr;
+	mat4 proj;
+	mat4 view;
+} ubo0;
 void main()
 {
 	color = bary.x < 0.05 || bary.y < 0.05 || bary.z < 0.05 ? vec4(1,0,0,1) : vec4(0,1,0,1);
@@ -332,16 +343,26 @@ void main()
 	V3f eye_pt(0, 0, 5);
 
 	GLuint vao = 0;
-	std::vector<GLuint> vbo(1);
+	std::vector<GLuint> vbo(2);
+
+	struct UColr {
+		float colr[4] = { 0, 0, 1, 1 };
+		float proj[16] = {};
+		float view[16] = {};
+	} colr;
 
 	glCreateBuffers(vbo.size(), vbo.data());
 	glNamedBufferData(vbo[0], pars->m_modl->m_vert.size() * sizeof(float), pars->m_modl->m_vert.data(), GL_STATIC_DRAW);
+	glNamedBufferData(vbo[1], sizeof colr, &colr, GL_STATIC_DRAW);
 
 	glCreateVertexArrays(1, &vao);
 	glEnableVertexArrayAttrib(vao, 0);
 	glVertexArrayVertexBuffer(vao, 0, vbo[0], 0, 3 * sizeof(float));
 	glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
 	glVertexArrayAttribBinding(vao, 0, 0);
+
+	glBindBufferBase(GL_UNIFORM_BUFFER, 0, vbo[1]);
+	glUniformBlockBinding(sha.getNativeHandle(), 0, 0);
 
 	auto timn = std::chrono::system_clock::now();
 
@@ -371,9 +392,12 @@ void main()
 			glDisableClientState(GL_COLOR_ARRAY);
 			glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 
+			Mp4f mp_proj(colr.proj), mp_view(colr.view);
+			mp_proj = proj;
+			mp_view = view;
+			glNamedBufferData(vbo[1], sizeof colr, &colr, GL_STATIC_DRAW);
+
 			sf::Shader::bind(&sha);
-			sha.setUniform("proj", sf::Glsl::Mat4(proj.data()));
-			sha.setUniform("view", sf::Glsl::Mat4(view.data()));
 			glBindVertexArray(vao);
 			glDrawArrays(GL_TRIANGLES, 0, pars->m_modl->m_indx.size());
 			glBindVertexArray(0);
