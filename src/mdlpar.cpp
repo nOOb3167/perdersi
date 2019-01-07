@@ -32,6 +32,8 @@ const float PS_PI = 3.14159265358979323846;
 //   If you are working with OpenGL 4x4 matrices then Affine3f and Affine3d are what you want.
 //   Since Eigen defaults to column-major storage, you can directly use the Transform::data() method to pass your transformation matrix to OpenGL.
 // GL_UNIFORM_BUFFER bindings are NOT VAO STATE
+// https://www.khronos.org/opengl/wiki/Sync_Object#Flushing_and_contexts
+//   about GLsync (Fence Syncs) and flushing
 
 namespace ei = ::Eigen;
 
