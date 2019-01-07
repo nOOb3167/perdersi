@@ -3,8 +3,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <chrono>
 #include <deque>
+#include <functional>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -249,6 +251,56 @@ public:
 	sp<PaModl> m_modl;
 	sp<PaArmt> m_armt;
 	sp<PaXtra> m_xtra;
+};
+
+class GxModl
+{
+	sp<Pa> m_pa;
+	GLuint m_vbo;
+
+	GxModl(const sp<Pa> &pa) :
+		m_pa(pa),
+		m_vbo(0)
+	{}
+
+	~GxModl()
+	{
+		glDeleteBuffers(1, &m_vbo);
+	}
+
+	template<typename T>
+	void
+	_vec(const std::function<void(void *, void *, size_t)> &f, uint8_t **p, const std::vector<T> &v)
+	{
+		const size_t s = v.size() * sizeof(std::vector<T>::value_type);
+		f(*p, v.data(), s);
+		*p += s;
+	}
+
+	size_t
+	_all(const std::function<void(void *, void *, size_t)> &f, uint8_t *p)
+	{
+		const PaModl &modl = *m_pa->m_modl;
+		const PaXtra &xtra = *m_pa->m_xtra;
+		uint8_t *p0 = p;
+		_vec(f, &p0, modl.m_indx);
+		_vec(f, &p0, modl.m_vert);
+		_vec(f, &p0, xtra.m_id);
+		_vec(f, &p0, xtra.m_wt);
+		for (const auto &a : modl.m_uvla)
+			_vec(f, &p0, a.m_layr);
+		return (size_t)(p0 - p);
+	}
+
+	void pars()
+	{
+		glCreateBuffers(1, &m_vbo);
+		auto f_nil = [&](void *dst, void *src, size_t s) {};
+		auto f_cpy = [&](void *dst, void *src, size_t s) { memcpy(dst, src, s); };
+		glNamedBufferStorage(m_vbo, _all(f_nil, nullptr), nullptr, GL_MAP_READ_BIT | GL_MAP_WRITE_BIT);
+		_all(f_cpy, (uint8_t *)glMapNamedBuffer(m_vbo, GL_READ_WRITE));
+		glUnmapNamedBuffer(m_vbo);
+	}
 };
 
 void _perspective(M4f &m, float left, float right, float bottom, float top, float _near, float _far)
