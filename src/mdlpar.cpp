@@ -109,8 +109,8 @@ class GxVert
 {
 public:
 	float m_vert[3];
-	float m_uv[2];
-	uint16_t m_weid;
+	uint16_t m_uv[2];
+	uint16_t m_weid[4];
 	float m_wewt[4];
 };
 #pragma pack (pop)
@@ -215,6 +215,12 @@ public:
 				it->second.push_back(std::make_pair("", pt_t(fzero)));
 	}
 
+#define membarr_elttype(VERTCLAS, MEMBARR) std::remove_reference<decltype(VERTCLAS::MEMBARR[0])>::type
+#define PS_VERT_SLOT(VARNAME, VERTCLAS, MEMBARR, MEMTYPE)																									\
+	static_assert(std::rank<decltype(VERTCLAS::MEMBARR)>::value == 1, "not array [MEMBARR]");															\
+	static_assert(std::is_same<MEMTYPE, membarr_elttype(VERTCLAS, MEMBARR)>::value, "member type mismatch [MEMTYPE]");									\
+	GxVertSlot VARNAME { offsetof(VERTCLAS, MEMBARR), sizeof(membarr_elttype(VERTCLAS, MEMBARR)), std::extent<decltype(VERTCLAS::MEMBARR)>::value }
+
 	inline sp<PaModl>
 	_modl(pt_t &modl_, const pt_t &armt_)
 	{
@@ -233,15 +239,19 @@ public:
 		assert(indx.size() == vert.size() && indx.size() == uvla.begin()->second.size());
 		auto f_float = [](uint8_t *p, const std::string &s) { *((float *)p) = std::stof(s); };
 		auto f_f2ui16 = [](uint8_t *p, const std::string &s) { *((uint16_t *)p) = PS_F2UI16(std::stof(s)); };
-		_vecflatten(vert, f_float, GxVertSlot{ offsetof(GxVert, m_vert), sizeof (float), 3 }, v);
+		PS_VERT_SLOT(slot_vert, GxVert, m_vert, float);
+		PS_VERT_SLOT(slot_uv, GxVert, m_uv, uint16_t);
+		_vecflatten(vert, f_float, slot_vert, v);
 		_vecflatten(uvla.begin()->second, f_f2ui16, GxVertSlot{ offsetof(GxVert, m_uv), sizeof(uint16_t), 2 }, v);
 		const pt_t &bna = weit.get_child("bna");
 		const pt_t &bwt = weit.get_child("bwt");
 		assert(indx.size() == bna.size() && indx.size() == bwt.size());
 		const auto &[bone_map_str, bone_map_int] = _bonemap(bone);
 		auto f_bone_id = [&bone_map_str](uint8_t *p, const std::string &s) { *((uint16_t *)p) = bone_map_str.find(s)->second; };
-		_vecflatten(bna, f_bone_id, GxVertSlot{ offsetof(GxVert, m_weid), sizeof(uint16_t), 4 }, v);
-		_vecflatten(bwt, f_float, GxVertSlot{ offsetof(GxVert, m_wewt), sizeof(float), 4 }, v);
+		PS_VERT_SLOT(slot_weid, GxVert, m_weid, uint16_t);
+		PS_VERT_SLOT(slot_wewt, GxVert, m_wewt, float);
+		_vecflatten(bna, f_bone_id, slot_weid, v);
+		_vecflatten(bwt, f_float, slot_wewt, v);
 		sp<PaModl> q(new PaModl());
 		q->m_name = modl_.begin()->first;
 		q->m_data = std::move(v);
