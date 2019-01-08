@@ -31,6 +31,8 @@
 
 #define PS_GLSYNC_FLAGS (GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT)
 
+#define PS_F2UI16(f) uint16_t(std::round((f) * 65535))
+
 const float PS_PI = 3.14159265358979323846;
 
 // https://eigen.tuxfamily.org/dox/group__TutorialGeometry.html
@@ -41,6 +43,7 @@ const float PS_PI = 3.14159265358979323846;
 //   about GLsync (Fence Syncs) and flushing
 //   (GLspec46 @ 4.1.2 Signaling)
 // ::boost::property_tree::json_parser::write_json(std::cout, ptree, true);
+// round(x * 3) / 3
 
 namespace ei = ::Eigen;
 
@@ -229,8 +232,9 @@ public:
 		assert(uvla.size() == 1);
 		assert(indx.size() == vert.size() && indx.size() == uvla.begin()->second.size());
 		auto f_float = [](uint8_t *p, const std::string &s) { *((float *)p) = std::stof(s); };
+		auto f_f2ui16 = [](uint8_t *p, const std::string &s) { *((uint16_t *)p) = PS_F2UI16(std::stof(s)); };
 		_vecflatten(vert, f_float, GxVertSlot{ offsetof(GxVert, m_vert), sizeof (float), 3 }, v);
-		_vecflatten(uvla.begin()->second, f_float, GxVertSlot{ offsetof(GxVert, m_uv), sizeof(float), 2 }, v);
+		_vecflatten(uvla.begin()->second, f_f2ui16, GxVertSlot{ offsetof(GxVert, m_uv), sizeof(uint16_t), 2 }, v);
 		const pt_t &bna = weit.get_child("bna");
 		const pt_t &bwt = weit.get_child("bwt");
 		assert(indx.size() == bna.size() && indx.size() == bwt.size());
@@ -350,6 +354,7 @@ void stuff()
 	std::string sha_vs = R"EOF(
 #version 460
 layout(location = 0) in vec3 vert;
+layout(location = 1) in vec2 uv;
 out vec3 bary;
 layout(binding = 0, std140) uniform Ubo0
 {
@@ -359,7 +364,7 @@ layout(binding = 0, std140) uniform Ubo0
 } ubo0;
 void main()
 {
-	bary = vec3((gl_VertexID + 0) % 3 == 0, (gl_VertexID - 1) % 3 == 0, (gl_VertexID - 2) % 3 == 0);
+	bary = vec3(mod(gl_VertexID - 0, 3) == 0, mod(gl_VertexID - 1, 3) == 0, mod(gl_VertexID - 2, 3) == 0);
 	gl_Position = ubo0.proj * ubo0.view * vec4(vert.xyz, 1);
 }
 )EOF";
@@ -407,10 +412,15 @@ void main()
 	glNamedBufferStorage(vbo[1], sizeof colr, nullptr, PS_GLSYNC_FLAGS);
 
 	glCreateVertexArrays(1, &vao);
+	glVertexArrayVertexBuffer(vao, 0, vbo[0], 0, sizeof(GxVert));
+
 	glEnableVertexArrayAttrib(vao, 0);
-	glVertexArrayVertexBuffer(vao, 0, vbo[0], offsetof(GxVert, m_vert), sizeof(GxVert));
-	glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
+	glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, offsetof(GxVert, m_vert));
 	glVertexArrayAttribBinding(vao, 0, 0);
+
+	glEnableVertexArrayAttrib(vao, 1);
+	glVertexArrayAttribFormat(vao, 1, 2, GL_UNSIGNED_SHORT, GL_TRUE, offsetof(GxVert, m_uv));
+	glVertexArrayAttribBinding(vao, 1, 0);
 
 	glBindBufferBase(GL_UNIFORM_BUFFER, 0, vbo[1]);
 	glUniformBlockBinding(sha.getNativeHandle(), 0, 0);
