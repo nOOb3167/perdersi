@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <utility>
 
 // GRRR
@@ -28,6 +29,8 @@
 #include <pscruft.hpp>
 #include <ps_b1.h>
 
+#define PS_GLSYNC_FLAGS (GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT)
+
 const float PS_PI = 3.14159265358979323846;
 
 // https://eigen.tuxfamily.org/dox/group__TutorialGeometry.html
@@ -36,6 +39,8 @@ const float PS_PI = 3.14159265358979323846;
 // GL_UNIFORM_BUFFER bindings are NOT VAO STATE
 // https://www.khronos.org/opengl/wiki/Sync_Object#Flushing_and_contexts
 //   about GLsync (Fence Syncs) and flushing
+//   (GLspec46 @ 4.1.2 Signaling)
+// ::boost::property_tree::json_parser::write_json(std::cout, ptree, true);
 
 namespace ei = ::Eigen;
 
@@ -50,6 +55,8 @@ using A3f = ::ei::Transform<float, 3, ei::Affine, ei::DontAlign>;
 using M4f = ::ei::Matrix<float, 4, 4, ei::DontAlign>;
 using Mp4f = ::ei::Map<::ei::Matrix<float, 4, 4, ei::DontAlign> >;
 using V3f = ::ei::Matrix<float, 3, 1, ei::DontAlign>;
+
+typedef std::function<void(uint8_t *, const std::string &)> fconv_t;
 
 enum PaLvl
 {
@@ -94,14 +101,22 @@ public:
 	std::vector<float> m_wt;
 };
 
+#pragma pack (push, 1)
+class GxVert
+{
+public:
+	float m_vert[3];
+	float m_uv[2];
+	uint16_t m_weid;
+	float m_wewt[4];
+};
+#pragma pack (pop)
+
 class PaModl
 {
 public:
 	std::string m_name;
-	std::vector<float> m_vert;
-	std::vector<uint32_t> m_indx;
-	std::vector<PaUvLa> m_uvla;
-	std::vector<weit_t> m_weit;
+	std::vector<GxVert> m_data;
 };
 
 class PaArmt
@@ -110,16 +125,23 @@ public:
 	std::string m_name;
 	std::vector<float> m_matx;
 	std::vector<PaBone> m_bone;
-};
 
-class PaXtra
-{
-public:
 	std::map<std::string, uint32_t> m_map_str;
 	std::map<uint32_t, std::string> m_map_int;
+};
 
-	std::vector<uint32_t> m_id;
-	std::vector<float> m_wt;
+class GxVertSlot
+{
+public:
+	size_t m_off;
+	size_t m_eltsize;
+	size_t m_vecsize;
+
+	inline size_t
+	get_off(size_t i) const
+	{
+		return m_off + m_eltsize * i;
+	}
 };
 
 class Pa
@@ -142,59 +164,83 @@ public:
 		return v;
 	}
 
-	inline std::vector<float>
-	_vecflatten(const pt_t &node, size_t vecsizehint)
+	inline void
+	_vecflatten(const pt_t &node, const fconv_t &fconv, const GxVertSlot &vs, std::vector<GxVert> &v)
 	{
-		std::vector<float> v;
-		for (auto it = node.ordered_begin(); it != node.not_found(); ++it)
-			for (const auto &x : _vec(it->second, vecsizehint))
-				v.push_back(x);
-		return v;
+		size_t c = 0;
+		assert(v.size() == node.size());
+		for (auto it = node.ordered_begin(); it != node.not_found(); ++it, c++) {
+			size_t c2 = 0;
+			assert(it->second.size() == vs.m_vecsize);
+			for (auto it2 = it->second.ordered_begin(); it2 != it->second.not_found(); ++it2, c2++)
+				fconv(((uint8_t *)(v.data() + c)) + vs.get_off(c2), it2->second.data());
+		}
 	}
 
-	weit_t
-	_iterweit(pt_t::const_assoc_iterator &it)
+	inline std::tuple<std::map<std::string, uint32_t>, std::map<uint32_t, std::string> >
+	_bonemap(const pt_t &bone)
 	{
-		std::string a = (it++)->second.data();
-		float b = std::stof((it++)->second.data());
-		return weit_t(a, b);
+		std::map<std::string, uint32_t> map_str;
+		std::map<uint32_t, std::string> map_int;
+
+		size_t idx = 0;
+		map_str["NONE"] = -1;
+		for (auto it = bone.ordered_begin(); it != bone.not_found(); ++it)
+			map_str[it->first] = idx++;
+		for (auto &[k, v] : map_str)
+			map_int[v] = k;
+		assert(1 + bone.size() == map_str.size());
+
+		return std::make_tuple(std::move(map_str), std::move(map_int));
 	}
 
 	inline void
-	_bone_name_map(const PaArmt &armt, std::map<std::string, uint32_t> &map_str, std::map<uint32_t, std::string> &map_int)
+	_modl_pre(pt_t &modl_)
 	{
-		size_t idx = 0;
-		map_str["NONE"] = -1;
-		for (const PaBone &b : armt.m_bone)
-			map_str[b.m_name] = idx++;
-		for (auto &[k, v] : map_str)
-			map_int[v] = k;
-		assert(1 + armt.m_bone.size() == map_str.size());
+		assert(modl_.size() == 1);
+		pt_t &modl = modl_.begin()->second;
+		pt_t &weit = modl.get_child("weit");
+		pt_t &bna = weit.get_child("bna");
+		pt_t &bwt = weit.get_child("bwt");
+		const std::string fzero = std::to_string(0.0f);
+		assert(bna.size() == bwt.size());
+		for (auto it = bna.ordered_begin(); it != bna.not_found(); ++it)
+			while (it->second.size() < 4)
+				it->second.push_back(std::make_pair("", pt_t("NONE")));
+		for (auto it = bwt.ordered_begin(); it != bwt.not_found(); ++it)
+			while (it->second.size() < 4)
+				it->second.push_back(std::make_pair("", pt_t(fzero)));
 	}
 
 	inline sp<PaModl>
-	_modl(const pt_t &modl_)
+	_modl(pt_t &modl_, const pt_t &armt_)
 	{
+		_modl_pre(modl_);
 		assert(modl_.size() == 1);
 		const pt_t &modl = modl_.begin()->second;
 		const pt_t &vert = modl.get_child("vert");
 		const pt_t &indx = modl.get_child("indx");
 		const pt_t &uvla = modl.get_child("uvla");
 		const pt_t &weit = modl.get_child("weit");
+		assert(armt_.size() == 1);
+		const pt_t &armt = armt_.begin()->second;
+		const pt_t &bone = armt.get_child("bone");
+		std::vector<GxVert> v(indx.size());
+		assert(uvla.size() == 1);
+		assert(indx.size() == vert.size() && indx.size() == uvla.begin()->second.size());
+		auto f_float = [](uint8_t *p, const std::string &s) { *((float *)p) = std::stof(s); };
+		_vecflatten(vert, f_float, GxVertSlot{ offsetof(GxVert, m_vert), sizeof (float), 3 }, v);
+		_vecflatten(uvla.begin()->second, f_float, GxVertSlot{ offsetof(GxVert, m_uv), sizeof(float), 2 }, v);
+		const pt_t &bna = weit.get_child("bna");
+		const pt_t &bwt = weit.get_child("bwt");
+		assert(indx.size() == bna.size() && indx.size() == bwt.size());
+		const auto &[bone_map_str, bone_map_int] = _bonemap(bone);
+		auto f_bone_id = [&bone_map_str](uint8_t *p, const std::string &s) { *((uint16_t *)p) = bone_map_str.find(s)->second; };
+		_vecflatten(bna, f_bone_id, GxVertSlot{ offsetof(GxVert, m_weid), sizeof(uint16_t), 4 }, v);
+		_vecflatten(bwt, f_float, GxVertSlot{ offsetof(GxVert, m_wewt), sizeof(float), 4 }, v);
 		sp<PaModl> q(new PaModl());
 		q->m_name = modl_.begin()->first;
-		q->m_vert = _vecflatten(vert, 3);
-		for (auto it = indx.ordered_begin(); it != indx.not_found(); ++it)
-			q->m_indx.push_back(std::stol(it->second.data()));
-		for (auto it = uvla.ordered_begin(); it != uvla.not_found(); ++it)
-			q->m_uvla.push_back(PaUvLa(it->first, _vecflatten(it->second, 2)));
-		for (auto it = weit.ordered_begin(); it != weit.not_found(); ++it) {
-			assert(it->second.size() % 2 == 0);
-			for (auto it2 = it->second.ordered_begin(); it2 != it->second.not_found(); /*dummy*/)
-				q->m_weit.push_back(_iterweit(it2));
-			for (size_t i = it->second.size() / 2; i < 4; i++)
-				q->m_weit.push_back(weit_t("NONE", 0.0f));
-		}
+		q->m_data = std::move(v);
 		return q;
 	}
 
@@ -210,39 +256,17 @@ public:
 		q->m_matx = _vec(matx, 4*4);
 		for (auto it = bone.ordered_begin(); it != bone.not_found(); ++it)
 			q->m_bone.push_back(PaBone(it->first, _vec(it->second, 4*4)));
-		return q;
-	}
-
-	inline sp<PaXtra>
-	_xtra(const PaModl &modl, const PaArmt &armt)
-	{
-		sp<PaXtra> q(new PaXtra());
-		size_t idx = 0;
-		
-		q->m_map_str["NONE"] = -1;
-		for (const PaBone &b : armt.m_bone)
-			q->m_map_str[b.m_name] = idx++;
-		for (auto &[k, v] : q->m_map_str)
-			q->m_map_int[v] = k;
-		assert(1 + armt.m_bone.size() == q->m_map_str.size());
-
-		for (const weit_t &w : modl.m_weit) {
-			q->m_id.push_back(q->m_map_str[std::get<0>(w)]);
-			q->m_wt.push_back(std::get<1>(w));
-		}
-
+		std::tie(q->m_map_str, q->m_map_int) = _bonemap(bone);
 		return q;
 	}
 
 	inline void
 	pars()
 	{
-		sp<PaModl> modl(_modl(m_pt.get_child("modl")));
+		sp<PaModl> modl(_modl(m_pt.get_child("modl"), m_pt.get_child("armt")));
 		sp<PaArmt> armt(_armt(m_pt.get_child("armt")));
-		sp<PaXtra> xtra(_xtra(*modl, *armt));
 		m_modl = modl;
 		m_armt = armt;
-		m_xtra = xtra;
 	}
 
 	std::string m_s;
@@ -250,7 +274,6 @@ public:
 
 	sp<PaModl> m_modl;
 	sp<PaArmt> m_armt;
-	sp<PaXtra> m_xtra;
 };
 
 class GxModl
@@ -268,38 +291,10 @@ class GxModl
 		glDeleteBuffers(1, &m_vbo);
 	}
 
-	template<typename T>
-	void
-	_vec(const std::function<void(void *, void *, size_t)> &f, uint8_t **p, const std::vector<T> &v)
-	{
-		const size_t s = v.size() * sizeof(std::vector<T>::value_type);
-		f(*p, v.data(), s);
-		*p += s;
-	}
-
-	size_t
-	_all(const std::function<void(void *, void *, size_t)> &f, uint8_t *p)
-	{
-		const PaModl &modl = *m_pa->m_modl;
-		const PaXtra &xtra = *m_pa->m_xtra;
-		uint8_t *p0 = p;
-		_vec(f, &p0, modl.m_indx);
-		_vec(f, &p0, modl.m_vert);
-		_vec(f, &p0, xtra.m_id);
-		_vec(f, &p0, xtra.m_wt);
-		for (const auto &a : modl.m_uvla)
-			_vec(f, &p0, a.m_layr);
-		return (size_t)(p0 - p);
-	}
-
 	void pars()
 	{
 		glCreateBuffers(1, &m_vbo);
-		auto f_nil = [&](void *dst, void *src, size_t s) {};
-		auto f_cpy = [&](void *dst, void *src, size_t s) { memcpy(dst, src, s); };
-		glNamedBufferStorage(m_vbo, _all(f_nil, nullptr), nullptr, GL_MAP_READ_BIT | GL_MAP_WRITE_BIT);
-		_all(f_cpy, (uint8_t *)glMapNamedBuffer(m_vbo, GL_READ_WRITE));
-		glUnmapNamedBuffer(m_vbo);
+		glNamedBufferStorage(m_vbo, m_pa->m_modl->m_data.size() * sizeof m_pa->m_modl->m_data[0], m_pa->m_modl->m_data.data(), GL_MAP_WRITE_BIT);
 	}
 };
 
@@ -405,13 +400,15 @@ void main()
 		float view[16] = {};
 	} colr;
 
+	GLsync sync = 0;
+
 	glCreateBuffers(vbo.size(), vbo.data());
-	glNamedBufferData(vbo[0], pars->m_modl->m_vert.size() * sizeof(float), pars->m_modl->m_vert.data(), GL_STATIC_DRAW);
-	glNamedBufferData(vbo[1], sizeof colr, &colr, GL_STATIC_DRAW);
+	glNamedBufferData(vbo[0], pars->m_modl->m_data.size() * sizeof pars->m_modl->m_data[0], pars->m_modl->m_data.data(), GL_STATIC_DRAW);
+	glNamedBufferStorage(vbo[1], sizeof colr, nullptr, PS_GLSYNC_FLAGS);
 
 	glCreateVertexArrays(1, &vao);
 	glEnableVertexArrayAttrib(vao, 0);
-	glVertexArrayVertexBuffer(vao, 0, vbo[0], 0, 3 * sizeof(float));
+	glVertexArrayVertexBuffer(vao, 0, vbo[0], offsetof(GxVert, m_vert), sizeof(GxVert));
 	glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
 	glVertexArrayAttribBinding(vao, 0, 0);
 
@@ -434,6 +431,15 @@ void main()
 			M4f view;
 			_lookat(view, eye_pt, V3f(0, 0, 0), V3f(0, 1, 0));
 
+			if (sync != 0)
+				if (glClientWaitSync(sync, GL_SYNC_FLUSH_COMMANDS_BIT, (GLuint64)-1) == GL_WAIT_FAILED)
+					throw PaExc();
+			UColr *p = (UColr *)glMapNamedBuffer(vbo[1], GL_WRITE_ONLY);
+			Mp4f(colr.proj) = proj;
+			Mp4f(colr.view) = view;
+			*p = colr;
+			glUnmapNamedBuffer(vbo[1]);
+
 			glClearColor(1, 1, 0, 1);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			
@@ -445,15 +451,14 @@ void main()
 			glDisableClientState(GL_COLOR_ARRAY);
 			glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 
-			Mp4f(colr.proj) = proj;
-			Mp4f(colr.view) = view;
-			glNamedBufferData(vbo[1], sizeof colr, &colr, GL_STATIC_DRAW);
-
 			sf::Shader::bind(&sha);
 			glBindVertexArray(vao);
-			glDrawArrays(GL_TRIANGLES, 0, pars->m_modl->m_indx.size());
+			glDrawArrays(GL_TRIANGLES, 0, pars->m_modl->m_data.size());
 			glBindVertexArray(0);
 			sf::Shader::bind(nullptr);
+
+			glDeleteSync(sync);
+			sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
 
 			//win.pushGLStates();
 			//win.popGLStates();

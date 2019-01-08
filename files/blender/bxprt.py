@@ -81,7 +81,7 @@ def m2(x: mathutils.Matrix):
     return [x.col[c][r] for c in range(4) for r in range(4)]
 
 def _modl(d: dict, meob: MeOb):
-    d['modl'][meob.m_mesh.name] = {'vert':[], 'indx':[], 'uvla':{}, 'weit':[]}
+    d['modl'][meob.m_mesh.name] = {'vert':[], 'indx':[], 'uvla':{}, 'weit':{'bna':[], 'bwt':[]}}
     d['modl'][meob.m_mesh.name]['vert'] = [v2(meob.m_mesh.vertices[meob.m_mesh.loops[x].vertex_index].co) for x in _genloopidx(meob.m_mesh.polygons)]
     d['modl'][meob.m_mesh.name]['indx'] = [x for x in range(len(list(_genloopidx(meob.m_mesh.polygons))))]
     for layr in meob.m_mesh.uv_layers:
@@ -94,11 +94,8 @@ def _modl(d: dict, meob: MeOb):
         not_affect: typing.List[bpy.types.VertexGroup] = [map_idx_grp[x.group] for x in vert.groups if x.group not in map_idx_grp]
         sor_affect: typing.List[bpy.types.VertexGroup] = sorted(yes_affect, key=lambda x: x.weight(vertidx), reverse=True)
         lim_affect: typing.List[bpy.types.VertexGroup] = sor_affect[0:4]
-        if len(lim_affect):
-            for v in lim_affect:
-                d['modl'][meob.m_mesh.name]['weit'].append([v.name, v.weight(vertidx)])
-        else:
-            d['modl'][meob.m_mesh.name]['weit'].append([])
+        d['modl'][meob.m_mesh.name]['weit']['bna'].append([v.name for v in lim_affect])
+        d['modl'][meob.m_mesh.name]['weit']['bwt'].append([v.weight(vertidx) for v in lim_affect])
 
 def _armt(d: dict, meob: MeOb):
     d['armt'][meob.m_armo.name] = {'matx':[], 'bone':{}}
