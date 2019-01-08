@@ -33,6 +33,12 @@
 
 #define PS_F2UI16(f) uint16_t(std::round((f) * 65535))
 
+#define PS_MEMBARR_ELTTYPE(VERTCLAS, MEMBARR) std::remove_reference<decltype(VERTCLAS::MEMBARR[0])>::type
+#define PS_VERT_SLOT(VARNAME, VERTCLAS, MEMBARR, MEMTYPE)																									\
+	static_assert(std::rank<decltype(VERTCLAS::MEMBARR)>::value == 1,                  "not array [MEMBARR]");												\
+	static_assert(std::is_same<MEMTYPE, PS_MEMBARR_ELTTYPE(VERTCLAS, MEMBARR)>::value, "member type mismatch [MEMTYPE]");									\
+	GxVertSlot VARNAME { offsetof(VERTCLAS, MEMBARR), sizeof(PS_MEMBARR_ELTTYPE(VERTCLAS, MEMBARR)), std::extent<decltype(VERTCLAS::MEMBARR)>::value }
+
 const float PS_PI = 3.14159265358979323846;
 
 // https://eigen.tuxfamily.org/dox/group__TutorialGeometry.html
@@ -215,46 +221,47 @@ public:
 				it->second.push_back(std::make_pair("", pt_t(fzero)));
 	}
 
-#define membarr_elttype(VERTCLAS, MEMBARR) std::remove_reference<decltype(VERTCLAS::MEMBARR[0])>::type
-#define PS_VERT_SLOT(VARNAME, VERTCLAS, MEMBARR, MEMTYPE)																									\
-	static_assert(std::rank<decltype(VERTCLAS::MEMBARR)>::value == 1, "not array [MEMBARR]");															\
-	static_assert(std::is_same<MEMTYPE, membarr_elttype(VERTCLAS, MEMBARR)>::value, "member type mismatch [MEMTYPE]");									\
-	GxVertSlot VARNAME { offsetof(VERTCLAS, MEMBARR), sizeof(membarr_elttype(VERTCLAS, MEMBARR)), std::extent<decltype(VERTCLAS::MEMBARR)>::value }
-
 	inline sp<PaModl>
 	_modl(pt_t &modl_, const pt_t &armt_)
 	{
 		_modl_pre(modl_);
+
 		assert(modl_.size() == 1);
 		const pt_t &modl = modl_.begin()->second;
 		const pt_t &vert = modl.get_child("vert");
 		const pt_t &indx = modl.get_child("indx");
 		const pt_t &uvla = modl.get_child("uvla");
 		const pt_t &weit = modl.get_child("weit");
+		const pt_t &bna = weit.get_child("bna");
+		const pt_t &bwt = weit.get_child("bwt");
 		assert(armt_.size() == 1);
 		const pt_t &armt = armt_.begin()->second;
 		const pt_t &bone = armt.get_child("bone");
-		std::vector<GxVert> v(indx.size());
+
 		assert(uvla.size() == 1);
 		assert(indx.size() == vert.size() && indx.size() == uvla.begin()->second.size());
+		assert(indx.size() == bna.size() && indx.size() == bwt.size());
+		std::vector<GxVert> v(indx.size());
+
+		const auto &[bone_map_str, bone_map_int] = _bonemap(bone);
+		auto f_bone_id = [&bone_map_str](uint8_t *p, const std::string &s) { *((uint16_t *)p) = bone_map_str.find(s)->second; };
 		auto f_float = [](uint8_t *p, const std::string &s) { *((float *)p) = std::stof(s); };
 		auto f_f2ui16 = [](uint8_t *p, const std::string &s) { *((uint16_t *)p) = PS_F2UI16(std::stof(s)); };
+
 		PS_VERT_SLOT(slot_vert, GxVert, m_vert, float);
 		PS_VERT_SLOT(slot_uv, GxVert, m_uv, uint16_t);
 		_vecflatten(vert, f_float, slot_vert, v);
-		_vecflatten(uvla.begin()->second, f_f2ui16, GxVertSlot{ offsetof(GxVert, m_uv), sizeof(uint16_t), 2 }, v);
-		const pt_t &bna = weit.get_child("bna");
-		const pt_t &bwt = weit.get_child("bwt");
-		assert(indx.size() == bna.size() && indx.size() == bwt.size());
-		const auto &[bone_map_str, bone_map_int] = _bonemap(bone);
-		auto f_bone_id = [&bone_map_str](uint8_t *p, const std::string &s) { *((uint16_t *)p) = bone_map_str.find(s)->second; };
+		_vecflatten(uvla.begin()->second, f_f2ui16, slot_uv, v);
+
 		PS_VERT_SLOT(slot_weid, GxVert, m_weid, uint16_t);
 		PS_VERT_SLOT(slot_wewt, GxVert, m_wewt, float);
 		_vecflatten(bna, f_bone_id, slot_weid, v);
 		_vecflatten(bwt, f_float, slot_wewt, v);
+
 		sp<PaModl> q(new PaModl());
 		q->m_name = modl_.begin()->first;
 		q->m_data = std::move(v);
+
 		return q;
 	}
 
