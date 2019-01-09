@@ -41,6 +41,8 @@
 	const std::function<MEMTYPE(const std::string &s)> VARNAME ## _fconv_aux = (FCONV);																			\
 	fconv_t VARNAME ## _fconv = [& VARNAME ## _fconv_aux ] (uint8_t *p, const std::string &s) { *(MEMTYPE *)p = VARNAME ## _fconv_aux(s); }
 
+#define PS_BONE_UNIFORM_MAX 64
+
 const float PS_PI = 3.14159265358979323846;
 
 // https://eigen.tuxfamily.org/dox/group__TutorialGeometry.html
@@ -300,12 +302,12 @@ public:
 
 class GxModl
 {
-	sp<Pa> m_pa;
-	GLuint m_vbo;
-
+public:
 	GxModl(const sp<Pa> &pa) :
 		m_pa(pa),
-		m_vbo(0)
+		m_vbo(0),
+		m_ubo_restmtx(0),
+		m_ubo_bonemtx(0)
 	{}
 
 	~GxModl()
@@ -317,7 +319,27 @@ class GxModl
 	{
 		glCreateBuffers(1, &m_vbo);
 		glNamedBufferStorage(m_vbo, m_pa->m_modl->m_data.size() * sizeof m_pa->m_modl->m_data[0], m_pa->m_modl->m_data.data(), GL_MAP_WRITE_BIT);
+
+		auto &bones = m_pa->m_armt->m_bone;
+		assert(bones.size() <= PS_BONE_UNIFORM_MAX);
+		std::vector<float> restmtx(16 * PS_BONE_UNIFORM_MAX);
+
+		glCreateBuffers(1, &m_ubo_restmtx);
+		for (size_t i = 0; i < bones.size(); i++)
+			Mp4f(restmtx.data() + 16 * i) = (Mp4f(m_pa->m_armt->m_matx.data()) * Mp4f(bones[i].m_matx.data())).inverse();
+		glNamedBufferStorage(m_ubo_restmtx, restmtx.size() * sizeof restmtx[0], restmtx.data(), GL_MAP_WRITE_BIT);
+
+		glCreateBuffers(1, &m_ubo_bonemtx);
+		std::vector<float> bonemtx(16 * PS_BONE_UNIFORM_MAX);
+		for (size_t i = 0; i < bones.size(); i++)
+			Mp4f(bonemtx.data() + 16 * i) = Mp4f(m_pa->m_armt->m_matx.data()) * Mp4f(bones[i].m_matx.data());
+		glNamedBufferStorage(m_ubo_bonemtx, bonemtx.size() * sizeof bonemtx[0], bonemtx.data(), GL_MAP_WRITE_BIT);
 	}
+
+	sp<Pa> m_pa;
+	GLuint m_vbo;
+	GLuint m_ubo_restmtx;
+	GLuint m_ubo_bonemtx;
 };
 
 void _perspective(M4f &m, float left, float right, float bottom, float top, float _near, float _far)
@@ -373,6 +395,8 @@ void stuff()
 #version 460
 layout(location = 0) in vec3 vert;
 layout(location = 1) in vec2 uv;
+layout(location = 2) in ivec4 weid;
+layout(location = 3) in vec4 wewt;
 out vec3 bary;
 layout(binding = 0, std140) uniform Ubo0
 {
@@ -380,10 +404,26 @@ layout(binding = 0, std140) uniform Ubo0
 	mat4 proj;
 	mat4 view;
 } ubo0;
+layout(binding = 1, std140) uniform Ubo1
+{
+	mat4 restmtx[64];
+} ubo1;
+layout(binding = 2, std140) uniform Ubo2
+{
+	mat4 bonemtx[64];
+} ubo2;
 void main()
 {
 	bary = vec3(mod(gl_VertexID - 0, 3) == 0, mod(gl_VertexID - 1, 3) == 0, mod(gl_VertexID - 2, 3) == 0);
-	gl_Position = ubo0.proj * ubo0.view * vec4(vert.xyz, 1);
+	vec4 x = vec4(0, 0, 0, 0);
+	if (wewt[0] == 0.0f) {
+		x = vec4(vert.xyz, 1);
+	} else {
+	for (int i = 0; i < 4; i++)
+		x += (ubo2.bonemtx[weid[i]] * ubo1.restmtx[weid[i]] * vec4(vert.xyz, 1)) * wewt[i];
+	}
+	gl_Position = ubo0.proj * ubo0.view * x;
+	//gl_Position = ubo0.proj * ubo0.view * vec4(vert.xyz, 1);
 }
 )EOF";
 
@@ -425,6 +465,9 @@ void main()
 
 	GLsync sync = 0;
 
+	sp<GxModl> modl(new GxModl(pars));
+	modl->pars();
+
 	glCreateBuffers(vbo.size(), vbo.data());
 	glNamedBufferData(vbo[0], pars->m_modl->m_data.size() * sizeof pars->m_modl->m_data[0], pars->m_modl->m_data.data(), GL_STATIC_DRAW);
 	glNamedBufferStorage(vbo[1], sizeof colr, nullptr, PS_GLSYNC_FLAGS);
@@ -440,8 +483,20 @@ void main()
 	glVertexArrayAttribFormat(vao, 1, 2, GL_UNSIGNED_SHORT, GL_TRUE, offsetof(GxVert, m_uv));
 	glVertexArrayAttribBinding(vao, 1, 0);
 
+	glEnableVertexArrayAttrib(vao, 2);
+	glVertexArrayAttribFormat(vao, 2, 4, GL_UNSIGNED_SHORT, GL_FALSE, offsetof(GxVert, m_weid));
+	glVertexArrayAttribBinding(vao, 2, 0);
+
+	glEnableVertexArrayAttrib(vao, 3);
+	glVertexArrayAttribFormat(vao, 3, 4, GL_FLOAT, GL_FALSE, offsetof(GxVert, m_wewt));
+	glVertexArrayAttribBinding(vao, 3, 0);
+
 	glBindBufferBase(GL_UNIFORM_BUFFER, 0, vbo[1]);
+	glBindBufferBase(GL_UNIFORM_BUFFER, 1, modl->m_ubo_restmtx);
+	glBindBufferBase(GL_UNIFORM_BUFFER, 2, modl->m_ubo_bonemtx);
 	glUniformBlockBinding(sha.getNativeHandle(), 0, 0);
+	glUniformBlockBinding(sha.getNativeHandle(), 1, 1);
+	glUniformBlockBinding(sha.getNativeHandle(), 2, 2);
 
 	auto timn = std::chrono::system_clock::now();
 
