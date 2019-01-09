@@ -34,10 +34,12 @@
 #define PS_F2UI16(f) uint16_t(std::round((f) * 65535))
 
 #define PS_MEMBARR_ELTTYPE(VERTCLAS, MEMBARR) std::remove_reference<decltype(VERTCLAS::MEMBARR[0])>::type
-#define PS_VERT_SLOT(VARNAME, VERTCLAS, MEMBARR, MEMTYPE)																									\
-	static_assert(std::rank<decltype(VERTCLAS::MEMBARR)>::value == 1,                  "not array [MEMBARR]");												\
-	static_assert(std::is_same<MEMTYPE, PS_MEMBARR_ELTTYPE(VERTCLAS, MEMBARR)>::value, "member type mismatch [MEMTYPE]");									\
-	GxVertSlot VARNAME { offsetof(VERTCLAS, MEMBARR), sizeof(PS_MEMBARR_ELTTYPE(VERTCLAS, MEMBARR)), std::extent<decltype(VERTCLAS::MEMBARR)>::value }
+#define PS_VERT_SLOT(VARNAME, VERTCLAS, MEMBARR, MEMTYPE, FCONV)																								\
+	static_assert(std::rank<decltype(VERTCLAS::MEMBARR)>::value == 1,                  "not array [MEMBARR]");													\
+	static_assert(std::is_same<MEMTYPE, PS_MEMBARR_ELTTYPE(VERTCLAS, MEMBARR)>::value, "member type mismatch [MEMTYPE]");										\
+	const GxVertSlot VARNAME { offsetof(VERTCLAS, MEMBARR), sizeof(PS_MEMBARR_ELTTYPE(VERTCLAS, MEMBARR)), std::extent<decltype(VERTCLAS::MEMBARR)>::value };	\
+	const std::function<MEMTYPE(const std::string &s)> VARNAME ## _fconv_aux = (FCONV);																			\
+	fconv_t VARNAME ## _fconv = [& VARNAME ## _fconv_aux ] (uint8_t *p, const std::string &s) { *(MEMTYPE *)p = VARNAME ## _fconv_aux(s); }
 
 const float PS_PI = 3.14159265358979323846;
 
@@ -244,19 +246,18 @@ public:
 		std::vector<GxVert> v(indx.size());
 
 		const auto &[bone_map_str, bone_map_int] = _bonemap(bone);
-		auto f_bone_id = [&bone_map_str](uint8_t *p, const std::string &s) { *((uint16_t *)p) = bone_map_str.find(s)->second; };
-		auto f_float = [](uint8_t *p, const std::string &s) { *((float *)p) = std::stof(s); };
-		auto f_f2ui16 = [](uint8_t *p, const std::string &s) { *((uint16_t *)p) = PS_F2UI16(std::stof(s)); };
+		auto f_bone_id = [&bone_map_str](const std::string &s) { return (uint16_t) bone_map_str.find(s)->second; };
+		auto f_float = [](const std::string &s) { return std::stof(s); };
+		auto f_f2ui16 = [](const std::string &s) { return PS_F2UI16(std::stof(s)); };
 
-		PS_VERT_SLOT(slot_vert, GxVert, m_vert, float);
-		PS_VERT_SLOT(slot_uv, GxVert, m_uv, uint16_t);
-		_vecflatten(vert, f_float, slot_vert, v);
-		_vecflatten(uvla.begin()->second, f_f2ui16, slot_uv, v);
-
-		PS_VERT_SLOT(slot_weid, GxVert, m_weid, uint16_t);
-		PS_VERT_SLOT(slot_wewt, GxVert, m_wewt, float);
-		_vecflatten(bna, f_bone_id, slot_weid, v);
-		_vecflatten(bwt, f_float, slot_wewt, v);
+		PS_VERT_SLOT(slot_vert, GxVert, m_vert, float, f_float);
+		PS_VERT_SLOT(slot_uv, GxVert, m_uv, uint16_t, f_f2ui16);
+		PS_VERT_SLOT(slot_weid, GxVert, m_weid, uint16_t, f_bone_id);
+		PS_VERT_SLOT(slot_wewt, GxVert, m_wewt, float, f_float);
+		_vecflatten(vert, slot_vert_fconv, slot_vert, v);
+		_vecflatten(uvla.begin()->second, slot_uv_fconv, slot_uv, v);
+		_vecflatten(bna, slot_weid_fconv, slot_weid, v);
+		_vecflatten(bwt, slot_wewt_fconv, slot_wewt, v);
 
 		sp<PaModl> q(new PaModl());
 		q->m_name = modl_.begin()->first;
