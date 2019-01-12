@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <chrono>
+#include <algorithm>
 #include <deque>
 #include <functional>
 #include <map>
@@ -14,6 +15,7 @@
 #include <string>
 #include <thread>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 // GRRR
@@ -28,6 +30,9 @@
 
 #include <pscruft.hpp>
 #include <ps_b1.h>
+
+#define PS_MAX(a, b) ((a) > (b)) ? (a) : (b))
+#define PS_MIN(a, b) ((a) < (b)) ? (a) : (b))
 
 #define PS_GLSYNC_FLAGS (GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT)
 
@@ -68,14 +73,9 @@ using A3f = ::ei::Transform<float, 3, ei::Affine, ei::DontAlign>;
 using M4f = ::ei::Matrix<float, 4, 4, ei::DontAlign>;
 using Mp4f = ::ei::Map<::ei::Matrix<float, 4, 4, ei::DontAlign> >;
 using V3f = ::ei::Matrix<float, 3, 1, ei::DontAlign>;
+using Qf = ::ei::Quaternion<float, ei::DontAlign>;
 
 typedef std::function<void(uint8_t *, const std::string &)> fconv_t;
-
-enum PaLvl
-{
-	PALVL_SAME = 1,
-	PALVL_NEXT = 2,
-};
 
 class PaExc : public std::runtime_error
 {
@@ -141,6 +141,18 @@ public:
 
 	std::map<std::string, uint32_t> m_map_str;
 	std::map<uint32_t, std::string> m_map_int;
+};
+
+class PaActn1
+{
+public:
+	std::map<std::string, std::vector<M4f> > m_bonemat;
+};
+
+class PaActn
+{
+public:
+	std::map<std::string, sp<PaActn1> > m_actn;
 };
 
 class GxVertSlot
@@ -284,11 +296,82 @@ public:
 		return q;
 	}
 
+	inline sp<PaActn>
+	_actn(const pt_t &actn_)
+	{
+		sp<PaActn> q(new PaActn());
+		for (auto it = actn_.ordered_begin(); it != actn_.not_found(); ++it) {
+			sp<PaActn1> w(new PaActn1());
+			for (auto it2 = it->second.ordered_begin(); it2 != it->second.not_found(); ++it) {
+				std::vector<M4f> scas;
+				std::vector<M4f> rots;
+				std::vector<M4f> locs;
+				size_t frame = 0;
+				pt_t::const_assoc_iterator it3;
+				if ((it3 = it2->second.find("location")) != it2->second.not_found()) {
+					const pt_t &m0 = it3->second.get_child("0");
+					const pt_t &m1 = it3->second.get_child("1");
+					const pt_t &m2 = it3->second.get_child("2");
+					std::vector<float> v0 = _vec(m0, m0.size());
+					std::vector<float> v1 = _vec(m1, m1.size());
+					std::vector<float> v2 = _vec(m2, m2.size());
+					assert(v0.size() == v1.size() && v0.size() == v2.size());
+					for (size_t i = 0; i < v0.size(); i++)
+						locs.push_back(A3f(A3f::Identity()).translate(V3f(v0[i], v1[i], v2[i])).matrix());
+				}
+				if ((it3 = it2->second.find("rotation_quaternion")) != it2->second.not_found()) {
+					// Quaternion WXYZ convention
+					const pt_t &m0 = it3->second.get_child("0");
+					const pt_t &m1 = it3->second.get_child("1");
+					const pt_t &m2 = it3->second.get_child("2");
+					const pt_t &m3 = it3->second.get_child("3");
+					std::vector<float> v0 = _vec(m0, m0.size());
+					std::vector<float> v1 = _vec(m1, m1.size());
+					std::vector<float> v2 = _vec(m2, m2.size());
+					std::vector<float> v3 = _vec(m3, m3.size());
+					assert(v0.size() == v1.size() && v0.size() == v2.size() && v0.size() == v3.size());
+					for (size_t i = 0; i < v0.size(); i++)
+						rots.push_back(Qf(v0[i], v1[i], v2[i], v3[i]).matrix());
+				}
+				if ((it3 = it2->second.find("scale")) != it2->second.not_found()) {
+					const pt_t &m0 = it3->second.get_child("0");
+					const pt_t &m1 = it3->second.get_child("1");
+					const pt_t &m2 = it3->second.get_child("2");
+					std::vector<float> v0 = _vec(m0, m0.size());
+					std::vector<float> v1 = _vec(m1, m1.size());
+					std::vector<float> v2 = _vec(m2, m2.size());
+					assert(v0.size() == v1.size() && v0.size() == v2.size());
+					for (size_t i = 0; i < v0.size(); i++)
+						scas.push_back(A3f(A3f::Identity()).scale(V3f(v0[i], v1[i], v2[i])).matrix());
+				}
+				std::vector<size_t> tmp;
+				if (scas.size()) tmp.push_back(scas.size());
+				if (rots.size()) tmp.push_back(rots.size());
+				if (locs.size()) tmp.push_back(locs.size());
+				assert(tmp.size() && std::equal(tmp.begin()++, tmp.end(), tmp.begin()));
+				std::vector<M4f> mats;
+				for (size_t i = 0; i < *tmp.begin(); i++) {
+					M4f m(M4f::Identity());
+					if (scas.size())
+						m = scas[i] * m;
+					if (rots.size())
+						m = rots[i] * m;
+					if (locs.size())
+						m = locs[i] * m;
+					mats.push_back(m);
+				}
+				w->m_bonemat[it2->first] = mats;
+			}
+			q->m_actn[it->first] = w;
+		}
+	}
+
 	inline void
 	pars()
 	{
 		sp<PaModl> modl(_modl(m_pt.get_child("modl"), m_pt.get_child("armt")));
 		sp<PaArmt> armt(_armt(m_pt.get_child("armt")));
+		sp<PaActn> actn(_actn(m_pt.get_child("actn")));
 		m_modl = modl;
 		m_armt = armt;
 	}
@@ -342,7 +425,17 @@ public:
 	GLuint m_ubo_bonemtx;
 };
 
-void _perspective(M4f &m, float left, float right, float bottom, float top, float _near, float _far)
+M4f _blender2sanity()
+{
+	M4f m;
+	m << 1, 0, 0, 0,
+		0, 0, 1, 0,
+		0, 1, 0, 0,
+		0, 0, 0, 1;
+	return m;
+}
+
+M4f _perspective(float left, float right, float bottom, float top, float _near, float _far)
 {
 	float A = (right + left) / (right - left);
 	float B = (top + bottom) / (top - bottom);
@@ -350,13 +443,15 @@ void _perspective(M4f &m, float left, float right, float bottom, float top, floa
 	float D = - (2 * _far * _near) / (_far - _near);
 	float X = (2 * _near) / (right - left);
 	float Y = (2 * _near) / (top - bottom);
+	M4f m;
 	m << X, 0, A, 0,
 		 0, Y, B, 0,
 		 0, 0, C, D,
 		 0, 0, -1, 0;
+	return m;
 }
 
-void _lookat(M4f &m, const V3f &eye, const V3f &cen, const V3f &up)
+M4f _lookat(const V3f &eye, const V3f &cen, const V3f &up)
 {
 	V3f f = (cen - eye).normalized();
 	V3f u_ = up.normalized();
@@ -372,7 +467,8 @@ void _lookat(M4f &m, const V3f &eye, const V3f &cen, const V3f &up)
 		 0, 0, 0, 1;
 	A3f trns(A3f::Identity());
 	trns.translate(V3f(-eye.x(), -eye.y(), -eye.z()));
-	m = q * trns.matrix();
+	M4f m = q * trns.matrix();
+	return m;
 }
 
 void stuff()
@@ -449,8 +545,7 @@ void main()
 	A3f horz_rot(A3f::Identity());
 	horz_rot.rotate(ei::AngleAxisf(0.01 * PS_PI, V3f::UnitY()));
 
-	M4f proj;
-	_perspective(proj, -1, 1, -1, 1, 1, 10);
+	M4f proj(_perspective(-1, 1, -1, 1, 1, 10));
 
 	V3f eye_pt(0, 0, 5);
 
@@ -511,8 +606,7 @@ void main()
 				eye_pt = (horz_rot * eye_pt).eval();
 				timn = std::chrono::system_clock::now();
 			}
-			M4f view;
-			_lookat(view, eye_pt, V3f(0, 0, 0), V3f(0, 1, 0));
+			M4f view(_lookat(eye_pt, V3f(0, 0, 0), V3f(0, 1, 0)) * _blender2sanity());
 
 			if (sync != 0)
 				if (glClientWaitSync(sync, GL_SYNC_FLUSH_COMMANDS_BIT, (GLuint64)-1) == GL_WAIT_FAILED)

@@ -5,7 +5,10 @@ import typing
 from dataclasses import dataclass as DATACLASSES_dataclass
 from functools import reduce as FUNCTOOLS_reduce
 from functools import wraps as FUNCTOOLS_wraps
+from math import ceil as MATH_ceil
+from math import floor as MATH_floor
 from pprint import pprint as pp
+from re import match as RE_match
 
 # mesh.vertices.weights
 # http://www.opengl-tutorial.org/intermediate-tutorials/tutorial-9-vbo-indexing/
@@ -103,12 +106,24 @@ def _armt(d: dict, meob: MeOb):
     for b in meob.m_armt.bones:
         d['armt'][meob.m_armo.name]['bone'][b.name] = m2(b.matrix_local)
 
+def _actn(d: dict, meob: MeOb):
+    for actn in bpy.data.actions:
+        d['actn'][actn.name] = {'fcrv': {}}
+        fcrv = {}
+        for f in actn.fcurves:
+            m = RE_match('pose.bones\["(\w+)"\].(\w+)', f.data_path)
+            f.update() # API docs: Ensure keyframes are sorted in chronological order and handles are set correctly
+            rnge = range(MATH_floor(f.range()[0]), MATH_ceil(f.range()[1]))
+            fcrv.setdefault(m[1], {}).setdefault(m[2], {})[f.array_index] = [f.evaluate(v) for v in rnge]
+        d['actn'][actn.name]['fcrv'] = fcrv
+
 def _run():
-    d = {'modl':{}, 'armt':{}}
+    d = {'modl':{}, 'armt':{}, 'actn':{}}
     meob: MeOb = MeOb.meob(bpy.data.meshes[0])
     _modl(d, meob)
     with WithPose(meob.m_armt, 'REST'):
         _armt(d, meob)
+    _actn(d, meob)
     d_write(d)
 
 if __name__ == '__main__':
