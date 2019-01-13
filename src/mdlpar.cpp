@@ -179,6 +179,17 @@ public:
 		boost::property_tree::json_parser::read_json(std::stringstream(m_s), m_pt);
 	}
 
+	M4f
+	_r2a(const ei::Matrix3f &a)
+	{
+		M4f m;
+		m << a(0, 0), a(0, 1), a(0, 2), 0,
+			a(1, 0), a(1, 1), a(1, 2), 0,
+			a(2, 0), a(2, 1), a(2, 2), 0,
+			0, 0, 0, 1;
+		return m;
+	}
+
 	inline std::vector<float>
 	_vec(const pt_t &node, size_t vecsizehint)
 	{
@@ -306,43 +317,28 @@ public:
 				std::vector<M4f> scas;
 				std::vector<M4f> rots;
 				std::vector<M4f> locs;
-				size_t frame = 0;
-				pt_t::const_assoc_iterator it3;
-				if ((it3 = it2->second.find("location")) != it2->second.not_found()) {
+				for (auto it3 = it2->second.ordered_begin(); it3 != it2->second.not_found(); ++it3) {
 					const pt_t &m0 = it3->second.get_child("0");
 					const pt_t &m1 = it3->second.get_child("1");
 					const pt_t &m2 = it3->second.get_child("2");
+					const boost::optional<const pt_t &> &m3 = it3->second.get_child_optional("3");
 					std::vector<float> v0 = _vec(m0, m0.size());
 					std::vector<float> v1 = _vec(m1, m1.size());
 					std::vector<float> v2 = _vec(m2, m2.size());
-					assert(v0.size() == v1.size() && v0.size() == v2.size());
-					for (size_t i = 0; i < v0.size(); i++)
-						locs.push_back(A3f(A3f::Identity()).translate(V3f(v0[i], v1[i], v2[i])).matrix());
-				}
-				if ((it3 = it2->second.find("rotation_quaternion")) != it2->second.not_found()) {
-					// Quaternion WXYZ convention
-					const pt_t &m0 = it3->second.get_child("0");
-					const pt_t &m1 = it3->second.get_child("1");
-					const pt_t &m2 = it3->second.get_child("2");
-					const pt_t &m3 = it3->second.get_child("3");
-					std::vector<float> v0 = _vec(m0, m0.size());
-					std::vector<float> v1 = _vec(m1, m1.size());
-					std::vector<float> v2 = _vec(m2, m2.size());
-					std::vector<float> v3 = _vec(m3, m3.size());
-					assert(v0.size() == v1.size() && v0.size() == v2.size() && v0.size() == v3.size());
-					for (size_t i = 0; i < v0.size(); i++)
-						rots.push_back(Qf(v0[i], v1[i], v2[i], v3[i]).matrix());
-				}
-				if ((it3 = it2->second.find("scale")) != it2->second.not_found()) {
-					const pt_t &m0 = it3->second.get_child("0");
-					const pt_t &m1 = it3->second.get_child("1");
-					const pt_t &m2 = it3->second.get_child("2");
-					std::vector<float> v0 = _vec(m0, m0.size());
-					std::vector<float> v1 = _vec(m1, m1.size());
-					std::vector<float> v2 = _vec(m2, m2.size());
-					assert(v0.size() == v1.size() && v0.size() == v2.size());
-					for (size_t i = 0; i < v0.size(); i++)
-						scas.push_back(A3f(A3f::Identity()).scale(V3f(v0[i], v1[i], v2[i])).matrix());
+					std::vector<float> v3 = m3 ? _vec(*m3, (*m3).size()) : std::vector<float>();
+					assert(v0.size() == v1.size() && v0.size() == v2.size() && (v3.empty() || (v0.size() == v3.size())));
+					// Quaternion convention is WXYZ
+					if (it3->first == "location")
+						for (size_t i = 0; i < v0.size(); i++)
+							locs.push_back(A3f(A3f::Identity()).translate(V3f(v0[i], v1[i], v2[i])).matrix());
+					else if (it3->first == "rotation_quaternion")
+						for (size_t i = 0; i < v0.size(); i++)
+							rots.push_back(_r2a(Qf(v0[i], v1[i], v2[i], v3[i]).matrix()));
+					else if (it3->first == "scale")
+						for (size_t i = 0; i < v0.size(); i++)
+							scas.push_back(A3f(A3f::Identity()).scale(V3f(v0[i], v1[i], v2[i])).matrix());
+					else
+						throw PaExc();
 				}
 				std::vector<size_t> tmp;
 				if (scas.size()) tmp.push_back(scas.size());
@@ -351,13 +347,11 @@ public:
 				assert(tmp.size() && std::equal(tmp.begin()++, tmp.end(), tmp.begin()));
 				std::vector<M4f> mats;
 				for (size_t i = 0; i < *tmp.begin(); i++) {
+					// Transform order is SCA ROT LOC
 					M4f m(M4f::Identity());
-					if (scas.size())
-						m = scas[i] * m;
-					if (rots.size())
-						m = rots[i] * m;
-					if (locs.size())
-						m = locs[i] * m;
+					if (scas.size()) m = scas[i] * m;
+					if (rots.size()) m = rots[i] * m;
+					if (locs.size()) m = locs[i] * m;
 					mats.push_back(m);
 				}
 				w->m_bonemat[it2->first] = mats;
