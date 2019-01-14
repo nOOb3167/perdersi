@@ -86,13 +86,13 @@ public:
 class PaBone
 {
 public:
-	inline PaBone(const std::string &name, const std::vector<float> &matx) :
+	inline PaBone(const std::string &name, const M4f &matx) :
 		m_name(name),
 		m_matx(matx)
 	{}
 
 	std::string m_name;
-	std::vector<float> m_matx;
+	M4f m_matx;
 };
 
 class PaUvLa
@@ -136,7 +136,7 @@ class PaArmt
 {
 public:
 	std::string m_name;
-	std::vector<float> m_matx;
+	M4f m_matx;
 	std::vector<PaBone> m_bone;
 
 	std::map<std::string, uint32_t> m_map_str;
@@ -298,11 +298,15 @@ public:
 		const pt_t &armt = armt_.begin()->second;
 		const pt_t &matx = armt.get_child("matx");
 		const pt_t &bone = armt.get_child("bone");
+		M4f amatx(Mp4f(_vec(matx, 4 * 4).data()));
+		std::vector<PaBone> abone;
+		// exported bone matrices are relative to armature
+		for (auto it = bone.ordered_begin(); it != bone.not_found(); ++it)
+			abone.push_back(PaBone(it->first, amatx * Mp4f(_vec(it->second, 4*4).data())));
 		sp<PaArmt> q(new PaArmt());
 		q->m_name = armt_.begin()->first;
-		q->m_matx = _vec(matx, 4*4);
-		for (auto it = bone.ordered_begin(); it != bone.not_found(); ++it)
-			q->m_bone.push_back(PaBone(it->first, _vec(it->second, 4*4)));
+		q->m_matx = amatx;
+		q->m_bone = std::move(abone);
 		std::tie(q->m_map_str, q->m_map_int) = _bonemap(bone);
 		return q;
 	}
@@ -312,8 +316,9 @@ public:
 	{
 		sp<PaActn> q(new PaActn());
 		for (auto it = actn_.ordered_begin(); it != actn_.not_found(); ++it) {
+			const pt_t &fcrv = it->second.get_child("fcrv");
 			sp<PaActn1> w(new PaActn1());
-			for (auto it2 = it->second.ordered_begin(); it2 != it->second.not_found(); ++it) {
+			for (auto it2 = fcrv.ordered_begin(); it2 != fcrv.not_found(); ++it2) {
 				std::vector<M4f> scas;
 				std::vector<M4f> rots;
 				std::vector<M4f> locs;
@@ -354,20 +359,23 @@ public:
 					if (locs.size()) m = locs[i] * m;
 					mats.push_back(m);
 				}
-				w->m_bonemat[it2->first] = mats;
+				w->m_bonemat[it2->first] = std::move(mats);
 			}
+			// exported bone matrices are relative to armature
+			for (auto &bm : w->m_bonemat)
+				for (auto bm2 : bm.second)
+					bm2 = m_armt->m_matx * bm2;
 			q->m_actn[it->first] = w;
 		}
+		return q;
 	}
 
 	inline void
 	pars()
 	{
-		sp<PaModl> modl(_modl(m_pt.get_child("modl"), m_pt.get_child("armt")));
-		sp<PaArmt> armt(_armt(m_pt.get_child("armt")));
-		sp<PaActn> actn(_actn(m_pt.get_child("actn")));
-		m_modl = modl;
-		m_armt = armt;
+		m_modl = _modl(m_pt.get_child("modl"), m_pt.get_child("armt"));
+		m_armt = _armt(m_pt.get_child("armt"));
+		m_actn = _actn(m_pt.get_child("actn"));
 	}
 
 	std::string m_s;
@@ -375,6 +383,7 @@ public:
 
 	sp<PaModl> m_modl;
 	sp<PaArmt> m_armt;
+	sp<PaActn> m_actn;
 };
 
 class GxModl
@@ -403,13 +412,13 @@ public:
 
 		glCreateBuffers(1, &m_ubo_restmtx);
 		for (size_t i = 0; i < bones.size(); i++)
-			Mp4f(restmtx.data() + 16 * i) = (Mp4f(m_pa->m_armt->m_matx.data()) * Mp4f(bones[i].m_matx.data())).inverse();
+			Mp4f(restmtx.data() + 16 * i) = bones[i].m_matx.inverse();
 		glNamedBufferStorage(m_ubo_restmtx, restmtx.size() * sizeof restmtx[0], restmtx.data(), GL_MAP_WRITE_BIT);
 
 		glCreateBuffers(1, &m_ubo_bonemtx);
 		std::vector<float> bonemtx(16 * PS_BONE_UNIFORM_MAX);
 		for (size_t i = 0; i < bones.size(); i++)
-			Mp4f(bonemtx.data() + 16 * i) = Mp4f(m_pa->m_armt->m_matx.data()) * Mp4f(bones[i].m_matx.data());
+			Mp4f(bonemtx.data() + 16 * i) = bones[i].m_matx;
 		glNamedBufferStorage(m_ubo_bonemtx, bonemtx.size() * sizeof bonemtx[0], bonemtx.data(), GL_MAP_WRITE_BIT);
 	}
 
