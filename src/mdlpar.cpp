@@ -147,6 +147,7 @@ class PaActn1
 {
 public:
 	std::map<std::string, std::vector<M4f> > m_bonemat;
+	size_t m_nframe;
 };
 
 class PaActn
@@ -179,7 +180,18 @@ public:
 		boost::property_tree::json_parser::read_json(std::stringstream(m_s), m_pt);
 	}
 
-	M4f
+	inline size_t
+	_checked_nframe(const std::vector<M4f> &scas, const std::vector<M4f> &rots, const std::vector<M4f> &locs)
+	{
+		std::vector<size_t> tmp;
+		if (scas.size()) tmp.push_back(scas.size());
+		if (rots.size()) tmp.push_back(rots.size());
+		if (locs.size()) tmp.push_back(locs.size());
+		assert(tmp.size() && std::equal(tmp.begin()++, tmp.end(), tmp.begin()));
+		return *tmp.begin();
+	}
+
+	inline M4f
 	_r2a(const ei::Matrix3f &a)
 	{
 		M4f m;
@@ -345,13 +357,9 @@ public:
 					else
 						throw PaExc();
 				}
-				std::vector<size_t> tmp;
-				if (scas.size()) tmp.push_back(scas.size());
-				if (rots.size()) tmp.push_back(rots.size());
-				if (locs.size()) tmp.push_back(locs.size());
-				assert(tmp.size() && std::equal(tmp.begin()++, tmp.end(), tmp.begin()));
+				const size_t nframe = _checked_nframe(scas, rots, locs);
 				std::vector<M4f> mats;
-				for (size_t i = 0; i < *tmp.begin(); i++) {
+				for (size_t i = 0; i < nframe; i++) {
 					// Transform order is SCA ROT LOC
 					M4f m(M4f::Identity());
 					if (scas.size()) m = scas[i] * m;
@@ -360,13 +368,15 @@ public:
 					mats.push_back(m);
 				}
 				w->m_bonemat[it2->first] = std::move(mats);
+				w->m_nframe = nframe;
 			}
-			// exported bone matrices are relative to armature
-			for (auto &bm : w->m_bonemat)
-				for (auto bm2 : bm.second)
-					bm2 = m_armt->m_matx * bm2;
 			q->m_actn[it->first] = w;
 		}
+		// exported bone matrices are relative to armature
+		for (auto &[anam, actn] : q->m_actn)
+			for (auto &[bnam, mats] : actn->m_bonemat)
+				for (auto &mat : mats)
+					mat = m_armt->m_matx * mat;
 		return q;
 	}
 
@@ -384,6 +394,45 @@ public:
 	sp<PaModl> m_modl;
 	sp<PaArmt> m_armt;
 	sp<PaActn> m_actn;
+};
+
+class GxActn
+{
+public:
+	inline GxActn() :
+		m_ubo_bonemtx()
+	{}
+
+	inline ~GxActn()
+	{
+		for (auto &[_, ubo] : m_ubo_bonemtx)
+			glDeleteBuffers(1, &ubo);
+	}
+
+	inline void
+	pars(const sp<Pa> &pa)
+	{
+		const size_t nbone = pa->m_armt->m_bone.size();
+		const size_t szmat = 4 * 4;
+		for (auto &[anam, actn] : pa->m_actn->m_actn) {
+			std::vector<float> bonemtx(actn->m_nframe * nbone * szmat);
+
+			for (size_t i = 0; i < actn->m_nframe; i++)
+				for (size_t j = 0; j < nbone; j++)
+					Mp4f(bonemtx.data() + i * nbone * szmat + j * szmat) = M4f::Identity();
+
+			for (size_t i = 0; i < actn->m_nframe; i++)
+				for (auto &[name, matx] : actn->m_bonemat)
+					Mp4f(bonemtx.data() + i * nbone * szmat + pa->m_armt->m_map_str.at(name) * szmat) = matx[i];
+
+			GLuint &ubo = m_ubo_bonemtx[anam];
+
+			glCreateBuffers(1, &ubo);
+			glNamedBufferStorage(ubo, bonemtx.size() * sizeof bonemtx[0], bonemtx.data(), GL_MAP_WRITE_BIT);
+		}
+	}
+
+	std::map<std::string, GLuint> m_ubo_bonemtx;
 };
 
 class GxModl
