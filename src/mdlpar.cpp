@@ -396,17 +396,40 @@ public:
 	sp<PaActn> m_actn;
 };
 
+class GxActn1
+{
+public:
+	inline GxActn1() :
+		m_nbone(0),
+		m_nfram(0),
+		m_ubo(0)
+	{}
+
+	inline ~GxActn1()
+	{
+		glDeleteBuffers(1, &m_ubo);
+	}
+
+	size_t m_nbone;
+	size_t m_nfram;
+	GLuint m_ubo;
+};
+
 class GxActn
 {
 public:
 	inline GxActn() :
-		m_ubo_bonemtx()
+		m_actn()
 	{}
 
-	inline ~GxActn()
+	inline std::tuple<GLuint, size_t, size_t>
+	bufparm(const std::string &anam, size_t fram)
 	{
-		for (auto &[_, ubo] : m_ubo_bonemtx)
-			glDeleteBuffers(1, &ubo);
+		const GxActn1 &actn = *m_actn.at(anam);
+		assert(fram < actn.m_nfram);
+		const size_t siz = actn.m_nbone * (4 * 4) * sizeof(float);
+		const size_t off = fram * siz;
+		return std::make_tuple(actn.m_ubo, off, siz);
 	}
 
 	inline void
@@ -415,6 +438,8 @@ public:
 		const size_t nbone = pa->m_armt->m_bone.size();
 		const size_t szmat = 4 * 4;
 		for (auto &[anam, actn] : pa->m_actn->m_actn) {
+			sp<GxActn1> q(new GxActn1());
+
 			std::vector<float> bonemtx(actn->m_nframe * nbone * szmat);
 
 			for (size_t i = 0; i < actn->m_nframe; i++)
@@ -425,14 +450,17 @@ public:
 				for (auto &[name, matx] : actn->m_bonemat)
 					Mp4f(bonemtx.data() + i * nbone * szmat + pa->m_armt->m_map_str.at(name) * szmat) = matx[i];
 
-			GLuint &ubo = m_ubo_bonemtx[anam];
+			glCreateBuffers(1, &q->m_ubo);
+			glNamedBufferStorage(q->m_ubo, bonemtx.size() * sizeof bonemtx[0], bonemtx.data(), GL_MAP_WRITE_BIT);
 
-			glCreateBuffers(1, &ubo);
-			glNamedBufferStorage(ubo, bonemtx.size() * sizeof bonemtx[0], bonemtx.data(), GL_MAP_WRITE_BIT);
+			q->m_nbone = nbone;
+			q->m_nfram = actn->m_nframe;
+
+			m_actn[anam] = q;
 		}
 	}
 
-	std::map<std::string, GLuint> m_ubo_bonemtx;
+	std::map<std::string, sp<GxActn1> > m_actn;
 };
 
 class GxModl
@@ -560,6 +588,10 @@ layout(binding = 2, std140) uniform Ubo2
 {
 	mat4 bonemtx[64];
 } ubo2;
+layout(binding = 3, std140) uniform Ubo3
+{
+	mat4 bonemtx[64];
+} ubo3;
 void main()
 {
 	bary = vec3(mod(gl_VertexID - 0, 3) == 0, mod(gl_VertexID - 1, 3) == 0, mod(gl_VertexID - 2, 3) == 0);
@@ -568,7 +600,7 @@ void main()
 		x = vec4(vert.xyz, 1);
 	} else {
 	for (int i = 0; i < 4; i++)
-		x += (ubo2.bonemtx[weid[i]] * ubo1.restmtx[weid[i]] * vec4(vert.xyz, 1)) * wewt[i];
+		x += (ubo3.bonemtx[weid[i]] * ubo1.restmtx[weid[i]] * vec4(vert.xyz, 1)) * wewt[i];
 	}
 	gl_Position = ubo0.proj * ubo0.view * x;
 	//gl_Position = ubo0.proj * ubo0.view * vec4(vert.xyz, 1);
@@ -614,6 +646,8 @@ void main()
 
 	sp<GxModl> modl(new GxModl(pars));
 	modl->pars();
+	sp<GxActn> actn(new GxActn());
+	actn->pars(pars);
 
 	glCreateBuffers(vbo.size(), vbo.data());
 	glNamedBufferData(vbo[0], pars->m_modl->m_data.size() * sizeof pars->m_modl->m_data[0], pars->m_modl->m_data.data(), GL_STATIC_DRAW);
@@ -641,9 +675,14 @@ void main()
 	glBindBufferBase(GL_UNIFORM_BUFFER, 0, vbo[1]);
 	glBindBufferBase(GL_UNIFORM_BUFFER, 1, modl->m_ubo_restmtx);
 	glBindBufferBase(GL_UNIFORM_BUFFER, 2, modl->m_ubo_bonemtx);
+
+	auto &[aubo, aoff, asiz] = actn->bufparm("Anim0", 10);
+	glBindBufferRange(GL_UNIFORM_BUFFER, 3, aubo, aoff, asiz);
+
 	glUniformBlockBinding(sha.getNativeHandle(), 0, 0);
 	glUniformBlockBinding(sha.getNativeHandle(), 1, 1);
 	glUniformBlockBinding(sha.getNativeHandle(), 2, 2);
+	glUniformBlockBinding(sha.getNativeHandle(), 3, 3);
 
 	auto timn = std::chrono::system_clock::now();
 
