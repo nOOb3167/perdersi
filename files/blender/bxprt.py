@@ -101,10 +101,15 @@ def _modl(d: dict, meob: MeOb):
         d['modl'][meob.m_mesh.name]['weit']['bwt'].append([v.weight(vertidx) for v in lim_affect])
 
 def _armt(d: dict, meob: MeOb):
-    d['armt'][meob.m_armo.name] = {'matx':[], 'bone':{}}
+    d['armt'][meob.m_armo.name] = {'matx':[], 'bone':{}, 'tree':{}}
     d['armt'][meob.m_armo.name]['matx'] = m2(meob.m_armo.matrix_world)
     for b in meob.m_armt.bones:
         d['armt'][meob.m_armo.name]['bone'][b.name] = m2(b.matrix_local)
+    def _rec(b_: bpy.types.Bone):
+        return {b.name : _rec(b) for b in b_.children}
+    rootbones: bpy.types.Bone = [b for b in meob.m_armt.bones if not b.parent]
+    assert len(rootbones) == 1
+    d['armt'][meob.m_armo.name]['tree'][rootbones[0].name] = _rec(rootbones[0])
 
 def _actn(d: dict, meob: MeOb):
     for actn in bpy.data.actions:
