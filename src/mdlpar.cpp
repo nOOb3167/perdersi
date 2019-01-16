@@ -59,6 +59,20 @@ const float PS_PI = 3.14159265358979323846;
 //   (GLspec46 @ 4.1.2 Signaling)
 // ::boost::property_tree::json_parser::write_json(std::cout, ptree, true);
 // round(x * 3) / 3
+// https://eigen.tuxfamily.org/dox/classEigen_1_1Quaternion.html
+//   Operations interpreting the quaternion as rotation have undefined behavior if the quaternion is not normalized.
+//https://blenderartists.org/t/get-bone-position-data-matrix-relative-to-parent-bone/1116191/5
+//  rest_matrix * fcurve_key.to_matrix()
+//  https://github.com/HENDRIX-ZT2/bfb-blender/blob/master/common_bfb.py#L178
+//    def get_bfb_matrix(bone):
+//  https://github.com/HENDRIX-ZT2/bfb-blender/blob/master/export_bf.py#L131
+//    export_keymat(rest_rot, ...)
+// https://docs.blender.org/api/blender2.8/bpy.types.PoseBone.html#bpy.types.PoseBone.matrix_basis
+//   'Alternative access to location/scale/rotation relative to the parent and own rest bone'
+//   bpy.data.objects['Armature'].pose.bones['Bone'].matrix_basis
+//   bpy.data.objects['Armature'].pose.bones['Bone'].rotation_quaternion.to_matrix()
+//     seem to match
+
 
 namespace ei = ::Eigen;
 
@@ -350,7 +364,7 @@ public:
 							locs.push_back(A3f(A3f::Identity()).translate(V3f(v0[i], v1[i], v2[i])).matrix());
 					else if (it3->first == "rotation_quaternion")
 						for (size_t i = 0; i < v0.size(); i++)
-							rots.push_back(_r2a(Qf(v0[i], v1[i], v2[i], v3[i]).matrix()));
+							rots.push_back(_r2a(Qf(v0[i], v1[i], v2[i], v3[i]).normalized().matrix()));
 					else if (it3->first == "scale")
 						for (size_t i = 0; i < v0.size(); i++)
 							scas.push_back(A3f(A3f::Identity()).scale(V3f(v0[i], v1[i], v2[i])).matrix());
@@ -372,7 +386,7 @@ public:
 			}
 			q->m_actn[it->first] = w;
 		}
-		// exported bone matrices are relative to armature
+		// exported bone matrices are as @bpy.types.PoseBone.matrix_basis then armature
 		for (auto &[anam, actn] : q->m_actn)
 			for (auto &[bnam, mats] : actn->m_bonemat)
 				for (auto &mat : mats)
