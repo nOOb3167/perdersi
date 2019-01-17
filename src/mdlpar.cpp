@@ -155,6 +155,9 @@ public:
 
 	std::map<std::string, uint32_t> m_map_str;
 	std::map<uint32_t, std::string> m_map_int;
+
+	std::vector<std::string> m_ar_pa;
+	std::vector<std::string> m_ar_na;
 };
 
 class PaActn1
@@ -257,6 +260,28 @@ public:
 	}
 
 	inline void
+	_bone_hier_rec(const pt_t::const_assoc_iterator &it, std::vector<std::string> &arpa, std::vector<std::string> &arna)
+	{
+		for (auto it2 = it->second.ordered_begin(); it2 != it->second.not_found(); ++it2) {
+			arpa.push_back(it->first);
+			arna.push_back(it2->first);
+			_bone_hier_rec(it2, arna, arpa);
+		}
+	}
+
+	inline std::tuple<std::vector<std::string>, std::vector<std::string> >
+	_bone_hier(const pt_t &tree)
+	{
+		std::vector<std::string> arpa;
+		std::vector<std::string> arna;
+		assert(tree.size() == 1);
+		arpa.push_back("NONE");
+		arna.push_back(tree.ordered_begin()->first);
+		_bone_hier_rec(tree.ordered_begin(), arpa, arna);
+		return std::make_tuple(std::move(arpa), std::move(arna));
+	}
+
+	inline void
 	_modl_pre(pt_t &modl_)
 	{
 		assert(modl_.size() == 1);
@@ -324,6 +349,7 @@ public:
 		const pt_t &armt = armt_.begin()->second;
 		const pt_t &matx = armt.get_child("matx");
 		const pt_t &bone = armt.get_child("bone");
+		const pt_t &tree = armt.get_child("tree");
 		M4f amatx(Mp4f(_vec(matx, 4 * 4).data()));
 		std::vector<PaBone> abone;
 		// exported bone matrices are relative to armature
@@ -334,6 +360,7 @@ public:
 		q->m_matx = amatx;
 		q->m_bone = std::move(abone);
 		std::tie(q->m_map_str, q->m_map_int) = _bonemap(bone);
+		std::tie(q->m_ar_pa, q->m_ar_na) = _bone_hier(tree);
 		return q;
 	}
 
