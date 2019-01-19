@@ -81,7 +81,7 @@ def v2(x: mathutils.Vector):
 
 # column-major
 def m2(x: mathutils.Matrix):
-    return [x.col[c][r] for c in range(4) for r in range(4)]
+    return [x.col[c][r] for c in range(len(x.col)) for r in range(len(x.row))]
 
 def _modl(d: dict, meob: MeOb):
     d['modl'][meob.m_mesh.name] = {'vert':[], 'indx':[], 'uvla':{}, 'weit':{'bna':[], 'bwt':[]}}
@@ -104,7 +104,7 @@ def _armt(d: dict, meob: MeOb):
     d['armt'][meob.m_armo.name] = {'matx':[], 'bone':{}, 'tree':{}}
     d['armt'][meob.m_armo.name]['matx'] = m2(meob.m_armo.matrix_world)
     for b in meob.m_armt.bones:
-        d['armt'][meob.m_armo.name]['bone'][b.name] = m2(b.matrix_local)
+        d['armt'][meob.m_armo.name]['bone'][b.name] = m2(b.matrix.to_4x4())
     def _rec(b_: bpy.types.Bone):
         return {b.name : _rec(b) for b in b_.children}
     rootbones: bpy.types.Bone = [b for b in meob.m_armt.bones if not b.parent]

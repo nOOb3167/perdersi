@@ -48,7 +48,7 @@
 
 #define PS_BONE_UNIFORM_MAX 64
 
-const float PS_PI = 3.14159265358979323846;
+const double PS_PI = 3.14159265358979323846;
 
 // https://eigen.tuxfamily.org/dox/group__TutorialGeometry.html
 //   If you are working with OpenGL 4x4 matrices then Affine3f and Affine3d are what you want.
@@ -70,7 +70,7 @@ const float PS_PI = 3.14159265358979323846;
 // https://docs.blender.org/api/blender2.8/bpy.types.PoseBone.html#bpy.types.PoseBone.matrix_basis
 //   'Alternative access to location/scale/rotation relative to the parent and own rest bone'
 //   bpy.data.objects['Armature'].pose.bones['Bone'].matrix_basis
-//   bpy.data.objects['Armature'].pose.bones['Bone'].rotation_quaternion.to_matrix()
+//   bpy.data.objects['Armature'].pose.bones['Bone'].rotation_quaternion.normalized().to_matrix()
 //     seem to match
 
 
@@ -90,6 +90,18 @@ using V3f = ::ei::Matrix<float, 3, 1, ei::DontAlign>;
 using Qf = ::ei::Quaternion<float, ei::DontAlign>;
 
 typedef std::function<void(uint8_t *, const std::string &)> fconv_t;
+
+inline pt_t::const_assoc_iterator
+begin(pt_t &v)
+{
+	return v.ordered_begin();
+}
+
+inline pt_t::const_assoc_iterator
+end(pt_t &v)
+{
+	return v.not_found();
+}
 
 class PaExc : public std::runtime_error
 {
@@ -153,8 +165,8 @@ public:
 	M4f m_matx;
 	std::vector<PaBone> m_bone;
 
-	std::map<std::string, uint32_t> m_map_str;
-	std::map<uint32_t, std::string> m_map_int;
+	std::map<std::string, uint16_t> m_map_str;
+	std::map<uint16_t, std::string> m_map_int;
 
 	std::vector<std::string> m_ar_pa;
 	std::vector<std::string> m_ar_na;
@@ -242,19 +254,18 @@ public:
 		}
 	}
 
-	inline std::tuple<std::map<std::string, uint32_t>, std::map<uint32_t, std::string> >
-	_bonemap(const pt_t &bone)
+	inline std::tuple<std::map<std::string, uint16_t>, std::map<uint16_t, std::string> >
+	_bonemap_hier(const std::vector<std::string> &arna)
 	{
-		std::map<std::string, uint32_t> map_str;
-		std::map<uint32_t, std::string> map_int;
+		std::map<std::string, uint16_t> map_str;
+		std::map<uint16_t, std::string> map_int;
 
-		size_t idx = 0;
 		map_str["NONE"] = -1;
-		for (auto it = bone.ordered_begin(); it != bone.not_found(); ++it)
-			map_str[it->first] = idx++;
+		for (uint16_t i = 0; i < arna.size(); i++)
+			map_str[arna[i]] = i;
 		for (auto &[k, v] : map_str)
 			map_int[v] = k;
-		assert(1 + bone.size() == map_str.size());
+		assert(1 + arna.size() == map_str.size());
 
 		return std::make_tuple(std::move(map_str), std::move(map_int));
 	}
@@ -314,14 +325,14 @@ public:
 		const pt_t &bwt = weit.get_child("bwt");
 		assert(armt_.size() == 1);
 		const pt_t &armt = armt_.begin()->second;
-		const pt_t &bone = armt.get_child("bone");
+		const pt_t &tree = armt.get_child("tree");
 
 		assert(uvla.size() == 1);
 		assert(indx.size() == vert.size() && indx.size() == uvla.begin()->second.size());
 		assert(indx.size() == bna.size() && indx.size() == bwt.size());
 		std::vector<GxVert> v(indx.size());
 
-		const auto &[bone_map_str, bone_map_int] = _bonemap(bone);
+		const auto &[bone_map_str, bone_map_int] = _bonemap_hier(std::get<1>(_bone_hier(tree)));
 		auto f_bone_id = [&bone_map_str](const std::string &s) { return (uint16_t) bone_map_str.find(s)->second; };
 		auto f_float = [](const std::string &s) { return std::stof(s); };
 		auto f_f2ui16 = [](const std::string &s) { return PS_F2UI16(std::stof(s)); };
@@ -351,16 +362,14 @@ public:
 		const pt_t &bone = armt.get_child("bone");
 		const pt_t &tree = armt.get_child("tree");
 		M4f amatx(Mp4f(_vec(matx, 4 * 4).data()));
-		std::vector<PaBone> abone;
-		// exported bone matrices are relative to armature
-		for (auto it = bone.ordered_begin(); it != bone.not_found(); ++it)
-			abone.push_back(PaBone(it->first, amatx * Mp4f(_vec(it->second, 4*4).data())));
 		sp<PaArmt> q(new PaArmt());
 		q->m_name = armt_.begin()->first;
-		q->m_matx = amatx;
-		q->m_bone = std::move(abone);
-		std::tie(q->m_map_str, q->m_map_int) = _bonemap(bone);
+		q->m_matx = Mp4f(_vec(matx, 4 * 4).data());
 		std::tie(q->m_ar_pa, q->m_ar_na) = _bone_hier(tree);
+		std::tie(q->m_map_str, q->m_map_int) = _bonemap_hier(q->m_ar_na);
+		for (auto &[bna, bma] : bone)
+			q->m_bone.push_back(PaBone(bna, Mp4f(_vec(bma, 4 * 4).data())));
+		std::sort(q->m_bone.begin(), q->m_bone.end(), [&q](const PaBone &a, const PaBone &b) { return q->m_map_str.at(a.m_name) < q->m_map_str.at(b.m_name); });
 		return q;
 	}
 
@@ -368,31 +377,31 @@ public:
 	_actn(const pt_t &actn_)
 	{
 		sp<PaActn> q(new PaActn());
-		for (auto it = actn_.ordered_begin(); it != actn_.not_found(); ++it) {
-			const pt_t &fcrv = it->second.get_child("fcrv");
+		for (auto &[anam, adat] : actn_) {
+			const pt_t &fcrv = adat.get_child("fcrv");
 			sp<PaActn1> w(new PaActn1());
-			for (auto it2 = fcrv.ordered_begin(); it2 != fcrv.not_found(); ++it2) {
+			for (auto &[bnam, blanes] : fcrv) {
 				std::vector<M4f> scas;
 				std::vector<M4f> rots;
 				std::vector<M4f> locs;
-				for (auto it3 = it2->second.ordered_begin(); it3 != it2->second.not_found(); ++it3) {
-					const pt_t &m0 = it3->second.get_child("0");
-					const pt_t &m1 = it3->second.get_child("1");
-					const pt_t &m2 = it3->second.get_child("2");
-					const boost::optional<const pt_t &> &m3 = it3->second.get_child_optional("3");
+				for (auto &[lnam, lane] : blanes) {
+					const pt_t &m0 = lane.get_child("0");
+					const pt_t &m1 = lane.get_child("1");
+					const pt_t &m2 = lane.get_child("2");
+					const boost::optional<const pt_t &> &m3 = lane.get_child_optional("3");
 					std::vector<float> v0 = _vec(m0, m0.size());
 					std::vector<float> v1 = _vec(m1, m1.size());
 					std::vector<float> v2 = _vec(m2, m2.size());
 					std::vector<float> v3 = m3 ? _vec(*m3, (*m3).size()) : std::vector<float>();
 					assert(v0.size() == v1.size() && v0.size() == v2.size() && (v3.empty() || (v0.size() == v3.size())));
 					// Quaternion convention is WXYZ
-					if (it3->first == "location")
+					if (lnam == "location")
 						for (size_t i = 0; i < v0.size(); i++)
 							locs.push_back(A3f(A3f::Identity()).translate(V3f(v0[i], v1[i], v2[i])).matrix());
-					else if (it3->first == "rotation_quaternion")
+					else if (lnam == "rotation_quaternion")
 						for (size_t i = 0; i < v0.size(); i++)
 							rots.push_back(_r2a(Qf(v0[i], v1[i], v2[i], v3[i]).normalized().matrix()));
-					else if (it3->first == "scale")
+					else if (lnam == "scale")
 						for (size_t i = 0; i < v0.size(); i++)
 							scas.push_back(A3f(A3f::Identity()).scale(V3f(v0[i], v1[i], v2[i])).matrix());
 					else
@@ -408,16 +417,11 @@ public:
 					if (locs.size()) m = locs[i] * m;
 					mats.push_back(m);
 				}
-				w->m_bonemat[it2->first] = std::move(mats);
+				w->m_bonemat[bnam] = std::move(mats);
 				w->m_nframe = nframe;
 			}
-			q->m_actn[it->first] = w;
+			q->m_actn[anam] = w;
 		}
-		// exported bone matrices are as @bpy.types.PoseBone.matrix_basis then armature
-		for (auto &[anam, actn] : q->m_actn)
-			for (auto &[bnam, mats] : actn->m_bonemat)
-				for (auto &mat : mats)
-					mat = m_armt->m_matx * mat;
 		return q;
 	}
 
@@ -462,6 +466,42 @@ public:
 	inline GxActn() :
 		m_actn()
 	{}
+
+	inline std::tuple<std::vector<float>, size_t>
+	posebld(const sp<Pa> &pa, const std::string &anam, size_t nfram)
+	{
+		const size_t nbone = pa->m_armt->m_bone.size();
+		const size_t szmat = 4 * 4;
+		std::vector<float> bonemtx(1 * nbone * szmat);
+
+		const auto &arna = pa->m_armt->m_ar_na;
+		const auto &arpa = pa->m_armt->m_ar_pa;
+		const auto &bone = pa->m_armt->m_bone;
+		const auto &map_str = pa->m_armt->m_map_str;
+		const auto &mactn = pa->m_actn->m_actn;
+		const auto &bonemat = mactn.at(anam)->m_bonemat;
+
+		assert(arna.size() == nbone);
+
+		for (size_t i = 0; i < nbone; i++) {
+			assert(nfram < mactn.at(anam)->m_nframe);
+			assert(map_str.at(arpa[i]) == uint16_t(-1) || map_str.at(arpa[i]) < i);
+			M4f mpa(M4f::Identity());
+			const M4f &mrest = bone.at(map_str.at(arna[i])).m_matx;
+			M4f mfcrv(M4f::Identity());
+			if (map_str.at(arpa[i]) != uint16_t(-1))
+				mpa = Mp4f(bonemtx.data() + map_str.at(arpa[i]) * szmat);
+			if (auto it = bonemat.find(arna[i]); it != bonemat.end())
+				mfcrv = it->second.at(nfram);
+			const M4f ma_ = mpa * mrest * mfcrv;
+			Mp4f(bonemtx.data() + i * szmat) = ma_;
+		}
+
+		for (size_t i = 0; i < nbone; i++)
+			Mp4f(bonemtx.data() + i * szmat) = pa->m_armt->m_matx * Mp4f(bonemtx.data() + i * szmat);
+
+		return std::make_tuple(std::move(bonemtx), nbone);
+	}
 
 	inline std::tuple<GLuint, size_t, size_t>
 	bufparm(const std::string &anam, size_t fram)
@@ -668,7 +708,7 @@ void main()
 		throw PaExc();
 
 	A3f horz_rot(A3f::Identity());
-	horz_rot.rotate(ei::AngleAxisf(0.01 * PS_PI, V3f::UnitY()));
+	horz_rot.rotate(ei::AngleAxisf(float(0.01 * PS_PI), V3f::UnitY()));
 
 	M4f proj(_perspective(-1, 1, -1, 1, 1, 10));
 
@@ -689,8 +729,12 @@ void main()
 	modl->pars();
 	sp<GxActn> actn(new GxActn());
 	actn->pars(pars);
+	auto &[bonemtx, nbone] = actn->posebld(pars, "Anim0", 10);
+	GLuint xubo = 0;
+	glCreateBuffers(1, &xubo);
+	glNamedBufferStorage(xubo, bonemtx.size() * sizeof bonemtx[0], bonemtx.data(), GL_MAP_WRITE_BIT);
 
-	glCreateBuffers(vbo.size(), vbo.data());
+	glCreateBuffers(GLsizei(vbo.size()), vbo.data());
 	glNamedBufferData(vbo[0], pars->m_modl->m_data.size() * sizeof pars->m_modl->m_data[0], pars->m_modl->m_data.data(), GL_STATIC_DRAW);
 	glNamedBufferStorage(vbo[1], sizeof colr, nullptr, PS_GLSYNC_FLAGS);
 
@@ -719,6 +763,7 @@ void main()
 
 	auto &[aubo, aoff, asiz] = actn->bufparm("Anim0", 10);
 	glBindBufferRange(GL_UNIFORM_BUFFER, 3, aubo, aoff, asiz);
+	glBindBufferRange(GL_UNIFORM_BUFFER, 3, xubo, 0, 1 * (4 * 4) * sizeof(float));
 
 	glUniformBlockBinding(sha.getNativeHandle(), 0, 0);
 	glUniformBlockBinding(sha.getNativeHandle(), 1, 1);
@@ -762,7 +807,7 @@ void main()
 
 			sf::Shader::bind(&sha);
 			glBindVertexArray(vao);
-			glDrawArrays(GL_TRIANGLES, 0, pars->m_modl->m_data.size());
+			glDrawArrays(GL_TRIANGLES, 0, GLsizei(pars->m_modl->m_data.size()));
 			glBindVertexArray(0);
 			sf::Shader::bind(nullptr);
 
