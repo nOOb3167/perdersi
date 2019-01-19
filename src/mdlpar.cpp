@@ -121,6 +121,20 @@ public:
 	M4f m_matx;
 };
 
+inline M4f
+mtx_parent(const std::vector<PaBone> &bone, const std::string &arpai, const std::map<std::string, uint16_t> &map_str)
+{
+	if (uint16_t i = map_str.at(arpai); i != uint16_t(-1))
+		return bone[i].m_matx;
+	return M4f::Identity();
+}
+
+inline M4f
+mtx_us(const std::vector<PaBone> &bone, const std::string &arnai, const std::map<std::string, uint16_t> &map_str)
+{
+	return bone[map_str.at(arnai)].m_matx;
+}
+
 class PaUvLa
 {
 public:
@@ -564,19 +578,25 @@ public:
 		glCreateBuffers(1, &m_vbo);
 		glNamedBufferStorage(m_vbo, m_pa->m_modl->m_data.size() * sizeof m_pa->m_modl->m_data[0], m_pa->m_modl->m_data.data(), GL_MAP_WRITE_BIT);
 
-		auto &bones = m_pa->m_armt->m_bone;
-		assert(bones.size() <= PS_BONE_UNIFORM_MAX);
-		std::vector<float> restmtx(16 * PS_BONE_UNIFORM_MAX);
+		const auto &bone = m_pa->m_armt->m_bone;
+		const size_t nbone = bone.size();
+		const size_t szmat = 4 * 4;
+		const M4f &mar = m_pa->m_armt->m_matx;
+		const auto &arpa = m_pa->m_armt->m_ar_pa;
+		const auto &arna = m_pa->m_armt->m_ar_na;
+		const auto &map_str = m_pa->m_armt->m_map_str;
+		assert(bone.size() <= PS_BONE_UNIFORM_MAX);
+		std::vector<float> restmtx(PS_BONE_UNIFORM_MAX * szmat);
 
 		glCreateBuffers(1, &m_ubo_restmtx);
-		for (size_t i = 0; i < bones.size(); i++)
-			Mp4f(restmtx.data() + 16 * i) = bones[i].m_matx.inverse();
+		for (size_t i = 0; i < nbone; i++)
+			Mp4f(restmtx.data() + i * szmat) = (mar * mtx_parent(bone, arpa[i], map_str) * mtx_us(bone, arna[i], map_str)).inverse();
 		glNamedBufferStorage(m_ubo_restmtx, restmtx.size() * sizeof restmtx[0], restmtx.data(), GL_MAP_WRITE_BIT);
 
 		glCreateBuffers(1, &m_ubo_bonemtx);
-		std::vector<float> bonemtx(16 * PS_BONE_UNIFORM_MAX);
-		for (size_t i = 0; i < bones.size(); i++)
-			Mp4f(bonemtx.data() + 16 * i) = bones[i].m_matx;
+		std::vector<float> bonemtx(PS_BONE_UNIFORM_MAX * szmat);
+		for (size_t i = 0; i < bone.size(); i++)
+			Mp4f(bonemtx.data() + i * szmat) = bone[i].m_matx;
 		glNamedBufferStorage(m_ubo_bonemtx, bonemtx.size() * sizeof bonemtx[0], bonemtx.data(), GL_MAP_WRITE_BIT);
 	}
 
@@ -729,10 +749,6 @@ void main()
 	modl->pars();
 	sp<GxActn> actn(new GxActn());
 	actn->pars(pars);
-	auto &[bonemtx, nbone] = actn->posebld(pars, "Anim0", 10);
-	GLuint xubo = 0;
-	glCreateBuffers(1, &xubo);
-	glNamedBufferStorage(xubo, bonemtx.size() * sizeof bonemtx[0], bonemtx.data(), GL_MAP_WRITE_BIT);
 
 	glCreateBuffers(GLsizei(vbo.size()), vbo.data());
 	glNamedBufferData(vbo[0], pars->m_modl->m_data.size() * sizeof pars->m_modl->m_data[0], pars->m_modl->m_data.data(), GL_STATIC_DRAW);
@@ -761,9 +777,8 @@ void main()
 	glBindBufferBase(GL_UNIFORM_BUFFER, 1, modl->m_ubo_restmtx);
 	glBindBufferBase(GL_UNIFORM_BUFFER, 2, modl->m_ubo_bonemtx);
 
-	auto &[aubo, aoff, asiz] = actn->bufparm("Anim0", 10);
+	auto &[aubo, aoff, asiz] = actn->bufparm("Anim0", 0);
 	glBindBufferRange(GL_UNIFORM_BUFFER, 3, aubo, aoff, asiz);
-	glBindBufferRange(GL_UNIFORM_BUFFER, 3, xubo, 0, 1 * (4 * 4) * sizeof(float));
 
 	glUniformBlockBinding(sha.getNativeHandle(), 0, 0);
 	glUniformBlockBinding(sha.getNativeHandle(), 1, 1);
