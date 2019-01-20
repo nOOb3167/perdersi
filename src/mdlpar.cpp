@@ -103,6 +103,27 @@ end(pt_t &v)
 	return v.not_found();
 }
 
+inline std::vector<float>
+_m2v(const std::vector<M4f> &v)
+{
+	const size_t szmat = 4 * 4;
+	std::vector<float> a(v.size() * szmat);
+	for (size_t i = 0; i < v.size(); i++)
+		memcpy(a.data() + i * szmat, v[i].data(), szmat * sizeof(float));
+	return a;
+}
+
+inline std::vector<float>
+_m2v_multi(const std::vector<std::vector<M4f> > &v)
+{
+	std::vector<float> a;
+	for (size_t i = 0; i < v.size(); i++) {
+		auto &b = _m2v(v[i]);
+		std::copy(b.begin(), b.end(), std::back_inserter(a));
+	}
+	return a;
+}
+
 class PaExc : public std::runtime_error
 {
 public:
@@ -122,10 +143,10 @@ public:
 };
 
 inline M4f
-mtx_parent(const std::vector<PaBone> &bone, const std::string &arpai, const std::map<std::string, uint16_t> &map_str)
+mtx_parent(const std::vector<M4f> &mtxs, const std::string &arpai, const std::map<std::string, uint16_t> &map_str)
 {
 	if (uint16_t i = map_str.at(arpai); i != uint16_t(-1))
-		return bone[i].m_matx;
+		return mtxs[i];
 	return M4f::Identity();
 }
 
@@ -133,6 +154,14 @@ inline M4f
 mtx_us(const std::vector<PaBone> &bone, const std::string &arnai, const std::map<std::string, uint16_t> &map_str)
 {
 	return bone[map_str.at(arnai)].m_matx;
+}
+
+inline M4f
+mtx_fcrv(const std::map<std::string, std::vector<M4f> > &bonemat, const std::string &arnai, size_t nfram)
+{
+	if (auto it = bonemat.find(arnai); it != bonemat.end())
+		return it->second.at(nfram);
+	return M4f::Identity();
 }
 
 class PaUvLa
@@ -481,38 +510,30 @@ public:
 		m_actn()
 	{}
 
-	inline std::tuple<std::vector<float>, size_t>
-	posebld(const sp<Pa> &pa, const std::string &anam, size_t nfram)
+	inline std::tuple<std::vector<std::vector<M4f> >, size_t>
+	posebld(const sp<Pa> &pa, const std::string &anam)
 	{
 		const size_t nbone = pa->m_armt->m_bone.size();
-		const size_t szmat = 4 * 4;
-		std::vector<float> bonemtx(1 * nbone * szmat);
-
 		const auto &arna = pa->m_armt->m_ar_na;
 		const auto &arpa = pa->m_armt->m_ar_pa;
 		const auto &bone = pa->m_armt->m_bone;
 		const auto &map_str = pa->m_armt->m_map_str;
 		const auto &mactn = pa->m_actn->m_actn;
 		const auto &bonemat = mactn.at(anam)->m_bonemat;
+		const auto &armtmtx = pa->m_armt->m_matx;
 
-		assert(arna.size() == nbone);
+		const size_t nfram = mactn.at(anam)->m_nframe;
 
-		for (size_t i = 0; i < nbone; i++) {
-			assert(nfram < mactn.at(anam)->m_nframe);
-			assert(map_str.at(arpa[i]) == uint16_t(-1) || map_str.at(arpa[i]) < i);
-			M4f mpa(M4f::Identity());
-			const M4f &mrest = bone.at(map_str.at(arna[i])).m_matx;
-			M4f mfcrv(M4f::Identity());
-			if (map_str.at(arpa[i]) != uint16_t(-1))
-				mpa = Mp4f(bonemtx.data() + map_str.at(arpa[i]) * szmat);
-			if (auto it = bonemat.find(arna[i]); it != bonemat.end())
-				mfcrv = it->second.at(nfram);
-			const M4f ma_ = mpa * mrest * mfcrv;
-			Mp4f(bonemtx.data() + i * szmat) = ma_;
+		std::vector<std::vector<M4f> > bonemtx;
+
+		assert(arna.size() == nbone && arpa.size() == nbone);
+
+		for (size_t f = 0; f < nfram; f++) {
+			std::vector<M4f> bonemtx_(nbone);
+			for (size_t i = 0; i < nbone; i++)
+				bonemtx_[i] = armtmtx * mtx_parent(bonemtx_, arpa[i], map_str) * mtx_us(bone, arna[i], map_str) * mtx_fcrv(bonemat, arna[i], f);
+			bonemtx.push_back(bonemtx_);
 		}
-
-		for (size_t i = 0; i < nbone; i++)
-			Mp4f(bonemtx.data() + i * szmat) = pa->m_armt->m_matx * Mp4f(bonemtx.data() + i * szmat);
 
 		return std::make_tuple(std::move(bonemtx), nbone);
 	}
@@ -520,9 +541,10 @@ public:
 	inline std::tuple<GLuint, size_t, size_t>
 	bufparm(const std::string &anam, size_t fram)
 	{
+		const size_t szmat = 4 * 4;
 		const GxActn1 &actn = *m_actn.at(anam);
 		assert(fram < actn.m_nfram);
-		const size_t siz = actn.m_nbone * (4 * 4) * sizeof(float);
+		const size_t siz = actn.m_nbone * szmat * sizeof(float);
 		const size_t off = fram * siz;
 		return std::make_tuple(actn.m_ubo, off, siz);
 	}
@@ -535,18 +557,12 @@ public:
 		for (auto &[anam, actn] : pa->m_actn->m_actn) {
 			sp<GxActn1> q(new GxActn1());
 
-			std::vector<float> bonemtx(actn->m_nframe * nbone * szmat);
+			auto &[bonemtx, _] = posebld(pa, anam);
 
-			for (size_t i = 0; i < actn->m_nframe; i++)
-				for (size_t j = 0; j < nbone; j++)
-					Mp4f(bonemtx.data() + i * nbone * szmat + j * szmat) = M4f::Identity();
-
-			for (size_t i = 0; i < actn->m_nframe; i++)
-				for (auto &[name, matx] : actn->m_bonemat)
-					Mp4f(bonemtx.data() + i * nbone * szmat + pa->m_armt->m_map_str.at(name) * szmat) = matx[i];
+			std::vector<float> bonemtx_f(_m2v_multi(bonemtx));
 
 			glCreateBuffers(1, &q->m_ubo);
-			glNamedBufferStorage(q->m_ubo, bonemtx.size() * sizeof bonemtx[0], bonemtx.data(), GL_MAP_WRITE_BIT);
+			glNamedBufferStorage(q->m_ubo, bonemtx_f.size() * sizeof bonemtx_f[0], bonemtx_f.data(), GL_MAP_WRITE_BIT);
 
 			q->m_nbone = nbone;
 			q->m_nfram = actn->m_nframe;
@@ -581,23 +597,26 @@ public:
 		const auto &bone = m_pa->m_armt->m_bone;
 		const size_t nbone = bone.size();
 		const size_t szmat = 4 * 4;
-		const M4f &mar = m_pa->m_armt->m_matx;
+		const auto &armtmtx = m_pa->m_armt->m_matx;
 		const auto &arpa = m_pa->m_armt->m_ar_pa;
 		const auto &arna = m_pa->m_armt->m_ar_na;
 		const auto &map_str = m_pa->m_armt->m_map_str;
 		assert(bone.size() <= PS_BONE_UNIFORM_MAX);
-		std::vector<float> restmtx(PS_BONE_UNIFORM_MAX * szmat);
+		//std::vector<float> restmtx(PS_BONE_UNIFORM_MAX * szmat);
 
-		glCreateBuffers(1, &m_ubo_restmtx);
+		std::vector<M4f> restmtx(nbone);
 		for (size_t i = 0; i < nbone; i++)
-			Mp4f(restmtx.data() + i * szmat) = (mar * mtx_parent(bone, arpa[i], map_str) * mtx_us(bone, arna[i], map_str)).inverse();
-		glNamedBufferStorage(m_ubo_restmtx, restmtx.size() * sizeof restmtx[0], restmtx.data(), GL_MAP_WRITE_BIT);
+			restmtx[i] = (armtmtx * mtx_parent(restmtx, arpa[i], map_str) * mtx_us(bone, arna[i], map_str)).inverse();
+		std::vector<float> restmtx_(_m2v(restmtx));
+		glCreateBuffers(1, &m_ubo_restmtx);
+		glNamedBufferStorage(m_ubo_restmtx, restmtx_.size() * sizeof restmtx_[0], restmtx_.data(), GL_MAP_WRITE_BIT);
 
-		glCreateBuffers(1, &m_ubo_bonemtx);
-		std::vector<float> bonemtx(PS_BONE_UNIFORM_MAX * szmat);
+		std::vector<M4f> bonemtx(nbone);
 		for (size_t i = 0; i < bone.size(); i++)
-			Mp4f(bonemtx.data() + i * szmat) = bone[i].m_matx;
-		glNamedBufferStorage(m_ubo_bonemtx, bonemtx.size() * sizeof bonemtx[0], bonemtx.data(), GL_MAP_WRITE_BIT);
+			bonemtx[i] = bone[i].m_matx;
+		std::vector<float> bonemtx_(_m2v(bonemtx));
+		glCreateBuffers(1, &m_ubo_bonemtx);
+		glNamedBufferStorage(m_ubo_bonemtx, bonemtx_.size() * sizeof bonemtx_[0], bonemtx_.data(), GL_MAP_WRITE_BIT);
 	}
 
 	sp<Pa> m_pa;
@@ -777,7 +796,7 @@ void main()
 	glBindBufferBase(GL_UNIFORM_BUFFER, 1, modl->m_ubo_restmtx);
 	glBindBufferBase(GL_UNIFORM_BUFFER, 2, modl->m_ubo_bonemtx);
 
-	auto &[aubo, aoff, asiz] = actn->bufparm("Anim0", 0);
+	auto &[aubo, aoff, asiz] = actn->bufparm("Anim0", 10);
 	glBindBufferRange(GL_UNIFORM_BUFFER, 3, aubo, aoff, asiz);
 
 	glUniformBlockBinding(sha.getNativeHandle(), 0, 0);
