@@ -72,7 +72,8 @@ const double PS_PI = 3.14159265358979323846;
 //   bpy.data.objects['Armature'].pose.bones['Bone'].matrix_basis
 //   bpy.data.objects['Armature'].pose.bones['Bone'].rotation_quaternion.normalized().to_matrix()
 //     seem to match
-
+// https://github.com/MicrosoftDocs/visualstudio-docs/blob/master/docs/debugger/create-custom-views-of-native-objects.md
+// .natvisreload command in the Watch window
 
 namespace ei = ::Eigen;
 
@@ -143,11 +144,11 @@ public:
 };
 
 inline M4f
-mtx_parent(const std::vector<M4f> &mtxs, const std::string &arpai, const std::map<std::string, uint16_t> &map_str)
+mtx_parent(const std::vector<M4f> &mtxs, const std::string &arpai, const std::map<std::string, uint16_t> &map_str, const M4f &def)
 {
 	if (uint16_t i = map_str.at(arpai); i != uint16_t(-1))
 		return mtxs[i];
-	return M4f::Identity();
+	return def;
 }
 
 inline M4f
@@ -530,8 +531,12 @@ public:
 
 		for (size_t f = 0; f < nfram; f++) {
 			std::vector<M4f> bonemtx_(nbone);
-			for (size_t i = 0; i < nbone; i++)
-				bonemtx_[i] = armtmtx * mtx_parent(bonemtx_, arpa[i], map_str) * mtx_us(bone, arna[i], map_str) * mtx_fcrv(bonemat, arna[i], f);
+			for (size_t i = 0; i < nbone; i++) {
+				const M4f p = mtx_parent(bonemtx_, arpa[i], map_str, armtmtx);
+				const M4f r = mtx_us(bone, arna[i], map_str);
+				const M4f s = mtx_fcrv(bonemat, arna[i], f);
+				bonemtx_[i] = mtx_parent(bonemtx_, arpa[i], map_str, armtmtx) * mtx_us(bone, arna[i], map_str) * mtx_fcrv(bonemat, arna[i], f);
+			}
 			bonemtx.push_back(bonemtx_);
 		}
 
@@ -559,10 +564,10 @@ public:
 
 			auto &[bonemtx, _] = posebld(pa, anam);
 
-			std::vector<float> bonemtx_f(_m2v_multi(bonemtx));
+			std::vector<float> bonemtx_(_m2v_multi(bonemtx));
 
 			glCreateBuffers(1, &q->m_ubo);
-			glNamedBufferStorage(q->m_ubo, bonemtx_f.size() * sizeof bonemtx_f[0], bonemtx_f.data(), GL_MAP_WRITE_BIT);
+			glNamedBufferStorage(q->m_ubo, bonemtx_.size() * sizeof bonemtx_[0], bonemtx_.data(), GL_MAP_WRITE_BIT);
 
 			q->m_nbone = nbone;
 			q->m_nfram = actn->m_nframe;
@@ -605,8 +610,10 @@ public:
 		//std::vector<float> restmtx(PS_BONE_UNIFORM_MAX * szmat);
 
 		std::vector<M4f> restmtx(nbone);
-		for (size_t i = 0; i < nbone; i++)
-			restmtx[i] = (armtmtx * mtx_parent(restmtx, arpa[i], map_str) * mtx_us(bone, arna[i], map_str)).inverse();
+		for (size_t i = 0; i < nbone; i++) {
+			const M4f &tmp = mtx_parent(restmtx, arpa[i], map_str, armtmtx) * mtx_us(bone, arna[i], map_str);
+			restmtx[i] = tmp.inverse();
+		}
 		std::vector<float> restmtx_(_m2v(restmtx));
 		glCreateBuffers(1, &m_ubo_restmtx);
 		glNamedBufferStorage(m_ubo_restmtx, restmtx_.size() * sizeof restmtx_[0], restmtx_.data(), GL_MAP_WRITE_BIT);
@@ -702,11 +709,11 @@ layout(binding = 0, std140) uniform Ubo0
 } ubo0;
 layout(binding = 1, std140) uniform Ubo1
 {
-	mat4 restmtx[64];
+	mat4 restmtx[1];
 } ubo1;
 layout(binding = 2, std140) uniform Ubo2
 {
-	mat4 bonemtx[64];
+	mat4 bonemtx[1];
 } ubo2;
 layout(binding = 3, std140) uniform Ubo3
 {
@@ -715,14 +722,16 @@ layout(binding = 3, std140) uniform Ubo3
 void main()
 {
 	bary = vec3(mod(gl_VertexID - 0, 3) == 0, mod(gl_VertexID - 1, 3) == 0, mod(gl_VertexID - 2, 3) == 0);
-	vec4 x = vec4(0, 0, 0, 0);
+	vec3 x = vec3(0, 0, 0);
 	if (wewt[0] == 0.0f) {
-		x = vec4(vert.xyz, 1);
+		x = vert.xyz;
 	} else {
-	for (int i = 0; i < 4; i++)
-		x += (ubo3.bonemtx[weid[i]] * ubo1.restmtx[weid[i]] * vec4(vert.xyz, 1)) * wewt[i];
+		for (int i = 0; i < 4; i++) {
+			vec4 t = ubo3.bonemtx[10+max(weid[i], 0)] * ubo1.restmtx[max(weid[i], 0)] * vec4(vert.xyz, 1);
+			x += t.xyz * wewt[i];
+		}
 	}
-	gl_Position = ubo0.proj * ubo0.view * x;
+	gl_Position = ubo0.proj * ubo0.view * vec4(x.xyz, 1);
 	//gl_Position = ubo0.proj * ubo0.view * vec4(vert.xyz, 1);
 }
 )EOF";
@@ -797,7 +806,10 @@ void main()
 	glBindBufferBase(GL_UNIFORM_BUFFER, 2, modl->m_ubo_bonemtx);
 
 	auto &[aubo, aoff, asiz] = actn->bufparm("Anim0", 10);
-	glBindBufferRange(GL_UNIFORM_BUFFER, 3, aubo, aoff, asiz);
+	// FIXME: NSight does not show an active bufferbinding for glBindBufferRange
+	//   shader edited for glBindBufferBase
+	//glBindBufferRange(GL_UNIFORM_BUFFER, 3, aubo, aoff, asiz);
+	glBindBufferBase(GL_UNIFORM_BUFFER, 3, aubo);
 
 	glUniformBlockBinding(sha.getNativeHandle(), 0, 0);
 	glUniformBlockBinding(sha.getNativeHandle(), 1, 1);
