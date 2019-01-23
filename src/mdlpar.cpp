@@ -48,6 +48,8 @@
 
 #define PS_BONE_UNIFORM_MAX 64
 
+#define PS_ALIGNME(ELTNO, TYPE) _alignme((ELTNO) * sizeof(TYPE), ps_g_ubo_algn)
+
 const double PS_PI = 3.14159265358979323846;
 
 // https://eigen.tuxfamily.org/dox/group__TutorialGeometry.html
@@ -120,6 +122,26 @@ end(pt_t &v)
 	return v.not_found();
 }
 
+inline std::tuple<size_t, size_t>
+_alignme(size_t x, size_t align)
+{
+	size_t a = x;
+	if (size_t m = x % align; m)
+		a += align - m;
+	return std::tuple(a, a / align);
+}
+
+template<typename T>
+inline size_t
+_vec_equisize(const std::vector<std::vector<T> > &v)
+{
+	size_t s = v.empty() ? 0 : v[0].size();
+	for (const auto &a : v)
+		if (a.size() != s)
+			throw PaExc();
+	return s;
+}
+
 inline std::vector<float>
 _m2v(const std::vector<M4f> &v)
 {
@@ -180,6 +202,38 @@ mtx_fcrv(const std::map<std::string, std::vector<M4f> > &bonemat, const std::str
 		return it->second.at(nfram);
 	return M4f::Identity();
 }
+
+class GxBuf
+{
+public:
+	inline ~GxBuf()
+	{
+		glDeleteBuffers(1, &m_buf);
+	}
+
+	inline static sp<GxBuf>
+	fromMat4Multi(const std::vector<std::vector<M4f> > &v)
+	{
+		auto &[mul, _] = PS_ALIGNME(_vec_equisize(v), float);
+		std::vector<float> a;
+		for (size_t i = 0; i < v.size(); i++) {
+			auto &b = _m2v(v[i]);
+			b.resize(mul / sizeof(float));
+			std::copy(b.begin(), b.end(), std::back_inserter(a));
+		}
+		assert(v.size() * mul == a.size() * sizeof(float));
+		sp<GxBuf> q(new GxBuf());
+		q->m_mul = mul;
+		q->m_num = v.size();
+		glCreateBuffers(1, &q->m_buf);
+		glNamedBufferStorage(q->m_buf, a.size() * sizeof a[0], a.data(), GL_MAP_WRITE_BIT);
+		return q;
+	}
+
+	size_t m_mul = 0;
+	size_t m_num = 0;
+	GLuint m_buf = 0;
+};
 
 class PaUvLa
 {
@@ -507,17 +561,12 @@ public:
 	inline GxActn1() :
 		m_nbone(0),
 		m_nfram(0),
-		m_ubo(0)
+		m_buf()
 	{}
-
-	inline ~GxActn1()
-	{
-		glDeleteBuffers(1, &m_ubo);
-	}
 
 	size_t m_nbone;
 	size_t m_nfram;
-	GLuint m_ubo;
+	sp<GxBuf> m_buf;
 };
 
 class GxActn
@@ -559,17 +608,6 @@ public:
 		return std::make_tuple(std::move(bonemtx), nbone);
 	}
 
-	inline std::tuple<GLuint, size_t, size_t>
-	bufparm(const std::string &anam, size_t fram)
-	{
-		const size_t szmat = 4 * 4;
-		const GxActn1 &actn = *m_actn.at(anam);
-		assert(fram < actn.m_nfram);
-		const size_t siz = actn.m_nbone * szmat * sizeof(float);
-		const size_t off = fram * siz;
-		return std::make_tuple(actn.m_ubo, off, siz);
-	}
-
 	inline void
 	pars(const sp<Pa> &pa)
 	{
@@ -580,13 +618,9 @@ public:
 
 			auto &[bonemtx, _] = posebld(pa, anam);
 
-			std::vector<float> bonemtx_(_m2v_multi(bonemtx));
-
-			glCreateBuffers(1, &q->m_ubo);
-			glNamedBufferStorage(q->m_ubo, bonemtx_.size() * sizeof bonemtx_[0], bonemtx_.data(), GL_MAP_WRITE_BIT);
-
 			q->m_nbone = nbone;
 			q->m_nfram = actn->m_nframe;
+			q->m_buf = GxBuf::fromMat4Multi(bonemtx);
 
 			m_actn[anam] = q;
 		}
@@ -748,7 +782,7 @@ void main()
 		x = vert.xyz;
 	} else {
 		for (int i = 0; i < 4; i++) {
-			vec4 t = ubo3.bonemtx[10+max(weid[i], 0)] * ubo1.restmtx[max(weid[i], 0)] * vec4(vert.xyz, 1);
+			vec4 t = ubo3.bonemtx[max(weid[i], 0)] * ubo1.restmtx[max(weid[i], 0)] * vec4(vert.xyz, 1);
 			x += t.xyz * wewt[i];
 		}
 	}
@@ -826,11 +860,8 @@ void main()
 	glBindBufferBase(GL_UNIFORM_BUFFER, 1, modl->m_ubo_restmtx);
 	glBindBufferBase(GL_UNIFORM_BUFFER, 2, modl->m_ubo_bonemtx);
 
-	auto &[aubo, aoff, asiz] = actn->bufparm("Anim0", 10);
-	// FIXME: NSight does not show an active bufferbinding for glBindBufferRange
-	//   shader edited for glBindBufferBase
-	//glBindBufferRange(GL_UNIFORM_BUFFER, 3, aubo, aoff, asiz);
-	glBindBufferBase(GL_UNIFORM_BUFFER, 3, aubo);
+	const GxBuf &buf = *actn->m_actn.at("Anim0")->m_buf;
+	glBindBufferRange(GL_UNIFORM_BUFFER, 3, buf.m_buf, buf.m_mul * 10, buf.m_mul);
 
 	glUniformBlockBinding(sha.getNativeHandle(), 0, 0);
 	glUniformBlockBinding(sha.getNativeHandle(), 1, 1);
