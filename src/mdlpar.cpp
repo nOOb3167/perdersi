@@ -102,14 +102,6 @@ typedef std::function<void(uint8_t *, const std::string &)> fconv_t;
 
 GLint ps_g_ubo_algn = 0;
 
-inline void GLAPIENTRY
-pscbglerr(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam)
-{
-	if (type != GL_DEBUG_TYPE_OTHER) {
-		fprintf(stderr, "OpenGL Error (pscbglerr) [%s type = 0x%x, severity = 0x%x, message = [%s]]\n", (type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : ""), type, severity, message);
-	}
-}
-
 inline pt_t::const_assoc_iterator
 begin(pt_t &v)
 {
@@ -120,6 +112,14 @@ inline pt_t::const_assoc_iterator
 end(pt_t &v)
 {
 	return v.not_found();
+}
+
+inline void GLAPIENTRY
+_pscbglerr(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam)
+{
+	if (type != GL_DEBUG_TYPE_OTHER) {
+		fprintf(stderr, "OpenGL Error (pscbglerr) [%s type = 0x%x, severity = 0x%x, message = [%s]]\n", (type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : ""), type, severity, message);
+	}
 }
 
 inline std::tuple<size_t, size_t>
@@ -149,17 +149,6 @@ _m2v(const std::vector<M4f> &v)
 	std::vector<float> a(v.size() * szmat);
 	for (size_t i = 0; i < v.size(); i++)
 		memcpy(a.data() + i * szmat, v[i].data(), szmat * sizeof(float));
-	return a;
-}
-
-inline std::vector<float>
-_m2v_multi(const std::vector<std::vector<M4f> > &v)
-{
-	std::vector<float> a;
-	for (size_t i = 0; i < v.size(); i++) {
-		auto &b = _m2v(v[i]);
-		std::copy(b.begin(), b.end(), std::back_inserter(a));
-	}
 	return a;
 }
 
@@ -225,6 +214,20 @@ public:
 		sp<GxBuf> q(new GxBuf());
 		q->m_mul = mul;
 		q->m_num = v.size();
+		glCreateBuffers(1, &q->m_buf);
+		glNamedBufferStorage(q->m_buf, a.size() * sizeof a[0], a.data(), GL_MAP_WRITE_BIT);
+		return q;
+	}
+
+	inline static sp<GxBuf>
+	fromVec(const std::vector<float> &v)
+	{
+		auto &[mul, _] = PS_ALIGNME(v.size(), float);
+		std::vector<float> a(v);
+		a.resize(mul / sizeof(float));
+		sp<GxBuf> q(new GxBuf());
+		q->m_mul = mul;
+		q->m_num = 1;
 		glCreateBuffers(1, &q->m_buf);
 		glNamedBufferStorage(q->m_buf, a.size() * sizeof a[0], a.data(), GL_MAP_WRITE_BIT);
 		return q;
@@ -318,9 +321,16 @@ class Pa
 public:
 	inline Pa(const std::string &s) :
 		m_s(s),
-		m_pt()
+		m_pt(),
+		m_modl(),
+		m_armt(),
+		m_actn()
 	{
 		boost::property_tree::json_parser::read_json(std::stringstream(m_s), m_pt);
+
+		m_modl = _modl(m_pt.get_child("modl"), m_pt.get_child("armt"));
+		m_armt = _armt(m_pt.get_child("armt"));
+		m_actn = _actn(m_pt.get_child("actn"));
 	}
 
 	inline size_t
@@ -539,14 +549,6 @@ public:
 		return q;
 	}
 
-	inline void
-	pars()
-	{
-		m_modl = _modl(m_pt.get_child("modl"), m_pt.get_child("armt"));
-		m_armt = _armt(m_pt.get_child("armt"));
-		m_actn = _actn(m_pt.get_child("actn"));
-	}
-
 	std::string m_s;
 	pt_t m_pt;
 
@@ -572,9 +574,23 @@ public:
 class GxActn
 {
 public:
-	inline GxActn() :
+	inline GxActn(const sp<Pa> &pa) :
 		m_actn()
-	{}
+	{
+		const size_t nbone = pa->m_armt->m_bone.size();
+		const size_t szmat = 4 * 4;
+		for (auto &[anam, actn] : pa->m_actn->m_actn) {
+			sp<GxActn1> q(new GxActn1());
+
+			auto &[bonemtx, _] = posebld(pa, anam);
+
+			q->m_nbone = nbone;
+			q->m_nfram = actn->m_nframe;
+			q->m_buf = GxBuf::fromMat4Multi(bonemtx);
+
+			m_actn[anam] = q;
+		}
+	}
 
 	inline std::tuple<std::vector<std::vector<M4f> >, size_t>
 	posebld(const sp<Pa> &pa, const std::string &anam)
@@ -608,24 +624,6 @@ public:
 		return std::make_tuple(std::move(bonemtx), nbone);
 	}
 
-	inline void
-	pars(const sp<Pa> &pa)
-	{
-		const size_t nbone = pa->m_armt->m_bone.size();
-		const size_t szmat = 4 * 4;
-		for (auto &[anam, actn] : pa->m_actn->m_actn) {
-			sp<GxActn1> q(new GxActn1());
-
-			auto &[bonemtx, _] = posebld(pa, anam);
-
-			q->m_nbone = nbone;
-			q->m_nfram = actn->m_nframe;
-			q->m_buf = GxBuf::fromMat4Multi(bonemtx);
-
-			m_actn[anam] = q;
-		}
-	}
-
 	std::map<std::string, sp<GxActn1> > m_actn;
 };
 
@@ -635,16 +633,8 @@ public:
 	GxModl(const sp<Pa> &pa) :
 		m_pa(pa),
 		m_vbo(0),
-		m_ubo_restmtx(0),
-		m_ubo_bonemtx(0)
-	{}
-
-	~GxModl()
-	{
-		glDeleteBuffers(1, &m_vbo);
-	}
-
-	void pars()
+		m_buf_restmtx(),
+		m_buf_bonemtx()
 	{
 		glCreateBuffers(1, &m_vbo);
 		glNamedBufferStorage(m_vbo, m_pa->m_modl->m_data.size() * sizeof m_pa->m_modl->m_data[0], m_pa->m_modl->m_data.data(), GL_MAP_WRITE_BIT);
@@ -657,29 +647,29 @@ public:
 		const auto &arna = m_pa->m_armt->m_ar_na;
 		const auto &map_str = m_pa->m_armt->m_map_str;
 		assert(bone.size() <= PS_BONE_UNIFORM_MAX);
-		//std::vector<float> restmtx(PS_BONE_UNIFORM_MAX * szmat);
 
 		std::vector<M4f> restmtx(nbone);
 		for (size_t i = 0; i < nbone; i++) {
 			const M4f &tmp = mtx_parent(restmtx, arpa[i], map_str, armtmtx) * mtx_us(bone, arna[i], map_str);
 			restmtx[i] = tmp.inverse();
 		}
-		std::vector<float> restmtx_(_m2v(restmtx));
-		glCreateBuffers(1, &m_ubo_restmtx);
-		glNamedBufferStorage(m_ubo_restmtx, restmtx_.size() * sizeof restmtx_[0], restmtx_.data(), GL_MAP_WRITE_BIT);
+		m_buf_restmtx = GxBuf::fromVec(_m2v(restmtx));
 
 		std::vector<M4f> bonemtx(nbone);
 		for (size_t i = 0; i < bone.size(); i++)
 			bonemtx[i] = bone[i].m_matx;
-		std::vector<float> bonemtx_(_m2v(bonemtx));
-		glCreateBuffers(1, &m_ubo_bonemtx);
-		glNamedBufferStorage(m_ubo_bonemtx, bonemtx_.size() * sizeof bonemtx_[0], bonemtx_.data(), GL_MAP_WRITE_BIT);
+		m_buf_bonemtx = GxBuf::fromVec(_m2v(bonemtx));
+	}
+
+	~GxModl()
+	{
+		glDeleteBuffers(1, &m_vbo);
 	}
 
 	sp<Pa> m_pa;
 	GLuint m_vbo;
-	GLuint m_ubo_restmtx;
-	GLuint m_ubo_bonemtx;
+	sp<GxBuf> m_buf_restmtx;
+	sp<GxBuf> m_buf_bonemtx;
 };
 
 M4f _blender2sanity()
@@ -731,7 +721,6 @@ M4f _lookat(const V3f &eye, const V3f &cen, const V3f &up)
 void stuff()
 {
 	sp<Pa> pars(new Pa(std::string((char *)g_ps_b1, g_ps_b1_size)));
-	pars->pars();
 
 	sf::ContextSettings ctx(24);
 	sf::RenderWindow win(sf::VideoMode(800, 600), "", sf::Style::Default, ctx);
@@ -743,7 +732,7 @@ void stuff()
 		throw PaExc();
 
 	glEnable(GL_DEBUG_OUTPUT);
-	glDebugMessageCallback(pscbglerr, 0);
+	glDebugMessageCallback(_pscbglerr, 0);
 
 	glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &ps_g_ubo_algn);
 
@@ -829,9 +818,7 @@ void main()
 	GLsync sync = 0;
 
 	sp<GxModl> modl(new GxModl(pars));
-	modl->pars();
-	sp<GxActn> actn(new GxActn());
-	actn->pars(pars);
+	sp<GxActn> actn(new GxActn(pars));
 
 	glCreateBuffers(GLsizei(vbo.size()), vbo.data());
 	glNamedBufferData(vbo[0], pars->m_modl->m_data.size() * sizeof pars->m_modl->m_data[0], pars->m_modl->m_data.data(), GL_STATIC_DRAW);
@@ -857,8 +844,8 @@ void main()
 	glVertexArrayAttribBinding(vao, 3, 0);
 
 	glBindBufferBase(GL_UNIFORM_BUFFER, 0, vbo[1]);
-	glBindBufferBase(GL_UNIFORM_BUFFER, 1, modl->m_ubo_restmtx);
-	glBindBufferBase(GL_UNIFORM_BUFFER, 2, modl->m_ubo_bonemtx);
+	glBindBufferBase(GL_UNIFORM_BUFFER, 1, modl->m_buf_restmtx->m_buf);
+	glBindBufferBase(GL_UNIFORM_BUFFER, 2, modl->m_buf_bonemtx->m_buf);
 
 	const GxBuf &buf = *actn->m_actn.at("Anim0")->m_buf;
 	glBindBufferRange(GL_UNIFORM_BUFFER, 3, buf.m_buf, buf.m_mul * 10, buf.m_mul);
