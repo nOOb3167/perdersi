@@ -203,37 +203,38 @@ public:
 	inline static sp<GxBuf>
 	fromMat4Multi(const std::vector<std::vector<M4f> > &v)
 	{
-		auto &[mul, _] = PS_ALIGNME(_vec_equisize(v), float);
+		auto &[stride, _] = PS_ALIGNME(_vec_equisize(v), float);
 		std::vector<float> a;
 		for (size_t i = 0; i < v.size(); i++) {
 			auto &b = _m2v(v[i]);
-			b.resize(mul / sizeof(float));
+			b.resize(stride / sizeof(float));
 			std::copy(b.begin(), b.end(), std::back_inserter(a));
 		}
-		assert(v.size() * mul == a.size() * sizeof(float));
+		assert(v.size() * stride == a.size() * sizeof(float));
 		sp<GxBuf> q(new GxBuf());
-		q->m_mul = mul;
+		q->m_stride = stride;
 		q->m_num = v.size();
 		glCreateBuffers(1, &q->m_buf);
 		glNamedBufferStorage(q->m_buf, a.size() * sizeof a[0], a.data(), GL_MAP_WRITE_BIT);
 		return q;
 	}
 
+	template<typename T>
 	inline static sp<GxBuf>
-	fromVec(const std::vector<float> &v)
+	fromVec(const std::vector<T>& v, size_t n = 1)
 	{
-		auto &[mul, _] = PS_ALIGNME(v.size(), float);
-		std::vector<float> a(v);
-		a.resize(mul / sizeof(float));
+		auto &[stride, _] = PS_ALIGNME(v.size(), T);
+		std::vector<T> a(v);
+		a.resize(stride / sizeof(T));
 		sp<GxBuf> q(new GxBuf());
-		q->m_mul = mul;
-		q->m_num = 1;
+		q->m_stride = stride;
+		q->m_num = n;
 		glCreateBuffers(1, &q->m_buf);
 		glNamedBufferStorage(q->m_buf, a.size() * sizeof a[0], a.data(), GL_MAP_WRITE_BIT);
 		return q;
 	}
 
-	size_t m_mul = 0;
+	size_t m_stride = 0;
 	size_t m_num = 0;
 	GLuint m_buf = 0;
 };
@@ -632,12 +633,11 @@ class GxModl
 public:
 	GxModl(const sp<Pa> &pa) :
 		m_pa(pa),
-		m_vbo(0),
+		m_buf(),
 		m_buf_restmtx(),
 		m_buf_bonemtx()
 	{
-		glCreateBuffers(1, &m_vbo);
-		glNamedBufferStorage(m_vbo, m_pa->m_modl->m_data.size() * sizeof m_pa->m_modl->m_data[0], m_pa->m_modl->m_data.data(), GL_MAP_WRITE_BIT);
+		m_buf = GxBuf::fromVec(m_pa->m_modl->m_data);
 
 		const auto &bone = m_pa->m_armt->m_bone;
 		const size_t nbone = bone.size();
@@ -661,13 +661,8 @@ public:
 		m_buf_bonemtx = GxBuf::fromVec(_m2v(bonemtx));
 	}
 
-	~GxModl()
-	{
-		glDeleteBuffers(1, &m_vbo);
-	}
-
 	sp<Pa> m_pa;
-	GLuint m_vbo;
+	sp<GxBuf> m_buf;
 	sp<GxBuf> m_buf_restmtx;
 	sp<GxBuf> m_buf_bonemtx;
 };
@@ -821,11 +816,10 @@ void main()
 	sp<GxActn> actn(new GxActn(pars));
 
 	glCreateBuffers(GLsizei(vbo.size()), vbo.data());
-	glNamedBufferData(vbo[0], pars->m_modl->m_data.size() * sizeof pars->m_modl->m_data[0], pars->m_modl->m_data.data(), GL_STATIC_DRAW);
-	glNamedBufferStorage(vbo[1], sizeof colr, nullptr, PS_GLSYNC_FLAGS);
+	glNamedBufferStorage(vbo[0], sizeof colr, nullptr, PS_GLSYNC_FLAGS);
 
 	glCreateVertexArrays(1, &vao);
-	glVertexArrayVertexBuffer(vao, 0, vbo[0], 0, sizeof(GxVert));
+	glVertexArrayVertexBuffer(vao, 0, modl->m_buf->m_buf, 0, sizeof(GxVert));
 
 	glEnableVertexArrayAttrib(vao, 0);
 	glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, offsetof(GxVert, m_vert));
@@ -843,12 +837,12 @@ void main()
 	glVertexArrayAttribFormat(vao, 3, 4, GL_FLOAT, GL_FALSE, offsetof(GxVert, m_wewt));
 	glVertexArrayAttribBinding(vao, 3, 0);
 
-	glBindBufferBase(GL_UNIFORM_BUFFER, 0, vbo[1]);
+	glBindBufferBase(GL_UNIFORM_BUFFER, 0, vbo[0]);
 	glBindBufferBase(GL_UNIFORM_BUFFER, 1, modl->m_buf_restmtx->m_buf);
 	glBindBufferBase(GL_UNIFORM_BUFFER, 2, modl->m_buf_bonemtx->m_buf);
 
 	const GxBuf &buf = *actn->m_actn.at("Anim0")->m_buf;
-	glBindBufferRange(GL_UNIFORM_BUFFER, 3, buf.m_buf, buf.m_mul * 10, buf.m_mul);
+	glBindBufferRange(GL_UNIFORM_BUFFER, 3, buf.m_buf, buf.m_stride * 10, buf.m_stride);
 
 	glUniformBlockBinding(sha.getNativeHandle(), 0, 0);
 	glUniformBlockBinding(sha.getNativeHandle(), 1, 1);
@@ -873,11 +867,11 @@ void main()
 			if (sync != 0)
 				if (glClientWaitSync(sync, GL_SYNC_FLUSH_COMMANDS_BIT, (GLuint64)-1) == GL_WAIT_FAILED)
 					throw PaExc();
-			UColr *p = (UColr *)glMapNamedBuffer(vbo[1], GL_WRITE_ONLY);
+			UColr *p = (UColr *)glMapNamedBuffer(vbo[0], GL_WRITE_ONLY);
 			Mp4f(colr.proj) = proj;
 			Mp4f(colr.view) = view;
 			*p = colr;
-			glUnmapNamedBuffer(vbo[1]);
+			glUnmapNamedBuffer(vbo[0]);
 
 			glClearColor(1, 1, 0, 1);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
