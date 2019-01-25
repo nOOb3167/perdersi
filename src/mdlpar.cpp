@@ -802,7 +802,7 @@ void main()
 	V3f eye_pt(0, 0, 5);
 
 	GLuint vao = 0;
-	std::vector<GLuint> vbo(2);
+	std::vector<GLuint> vbo(1);
 
 	struct UColr {
 		float colr[4] = { 0, 0, 1, 1 };
@@ -892,9 +892,6 @@ void main()
 
 			glDeleteSync(sync);
 			sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
-
-			//win.pushGLStates();
-			//win.popGLStates();
 		}
 		win.display();
 	}
