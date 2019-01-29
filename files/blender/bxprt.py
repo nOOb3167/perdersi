@@ -7,6 +7,7 @@ from functools import reduce as FUNCTOOLS_reduce
 from functools import wraps as FUNCTOOLS_wraps
 from math import ceil as MATH_ceil
 from math import floor as MATH_floor
+from mathutils import Matrix as MATHUTILS_Matrix
 from pprint import pprint as pp
 from re import match as RE_match
 
@@ -83,6 +84,10 @@ def v2(x: mathutils.Vector):
 def m2(x: mathutils.Matrix):
     return [x.col[c][r] for c in range(len(x.col)) for r in range(len(x.row))]
 
+def bone_matrix_local_to_relative(b: bpy.types.Bone):
+    m = b.parent.matrix_local if b.parent else MATHUTILS_Matrix()
+    return m.inverted() @ b.matrix_local
+
 def _modl(d: dict, meob: MeOb):
     d['modl'][meob.m_mesh.name] = {'vert':[], 'indx':[], 'uvla':{}, 'weit':{'bna':[], 'bwt':[]}}
     d['modl'][meob.m_mesh.name]['vert'] = [v2(meob.m_mesh.vertices[meob.m_mesh.loops[x].vertex_index].co) for x in _genloopidx(meob.m_mesh.polygons)]
@@ -104,7 +109,7 @@ def _armt(d: dict, meob: MeOb):
     d['armt'][meob.m_armo.name] = {'matx':[], 'bone':{}, 'tree':{}}
     d['armt'][meob.m_armo.name]['matx'] = m2(meob.m_armo.matrix_world)
     for b in meob.m_armt.bones:
-        d['armt'][meob.m_armo.name]['bone'][b.name] = m2(b.matrix.to_4x4())
+        d['armt'][meob.m_armo.name]['bone'][b.name] = m2(bone_matrix_local_to_relative(b))
     def _rec(b_: bpy.types.Bone):
         return {b.name : _rec(b) for b in b_.children}
     rootbones: bpy.types.Bone = [b for b in meob.m_armt.bones if not b.parent]

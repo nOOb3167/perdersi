@@ -82,6 +82,14 @@ const double PS_PI = 3.14159265358979323846;
 //		non - zero and offset or size do not respectively satisfy the constraints described
 //		for those parameters for the specified target, as described in section 6.7.1.
 //   glspec46 @ table6.5 : offset restriction (UNIFORM_BUFFER_OFFSET_ALIGNMENT)
+// glspec46 @ 11.1.1 Vertex Attributes :
+//   When an attribute variable declared using one of the scalar or vector data types
+//   enumerated in table 11.3 is bound to a generic attribute index i, its value(s) are
+//   taken from the components of generic attribute i.
+//   Table 11.3: maps ex float->VertexAttrib ivec3->VertexAttribI3
+//   Verbiage implies commands need match types for values to be taken.
+// glslspec46 @ 4.1.14. Implicit Conversions :
+//   Note conversions defined follow DAG signed->unsigned->float->double
 
 namespace ei = ::Eigen;
 
@@ -648,9 +656,11 @@ public:
 		const auto &map_str = m_pa->m_armt->m_map_str;
 		assert(bone.size() <= PS_BONE_UNIFORM_MAX);
 
+		std::vector<M4f> tmpmtx(nbone);
 		std::vector<M4f> restmtx(nbone);
 		for (size_t i = 0; i < nbone; i++) {
-			const M4f &tmp = mtx_parent(restmtx, arpa[i], map_str, armtmtx) * mtx_us(bone, arna[i], map_str);
+			const M4f &tmp = mtx_parent(tmpmtx, arpa[i], map_str, armtmtx) * mtx_us(bone, arna[i], map_str);
+			tmpmtx[i] = tmp;
 			restmtx[i] = tmp.inverse();
 		}
 		m_buf_restmtx = GxBuf::fromVec(_m2v(restmtx));
@@ -830,7 +840,7 @@ void main()
 	glVertexArrayAttribBinding(vao, 1, 0);
 
 	glEnableVertexArrayAttrib(vao, 2);
-	glVertexArrayAttribFormat(vao, 2, 4, GL_UNSIGNED_SHORT, GL_FALSE, offsetof(GxVert, m_weid));
+	glVertexArrayAttribIFormat(vao, 2, 4, GL_UNSIGNED_SHORT, offsetof(GxVert, m_weid));
 	glVertexArrayAttribBinding(vao, 2, 0);
 
 	glEnableVertexArrayAttrib(vao, 3);
