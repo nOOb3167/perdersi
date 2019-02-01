@@ -29,6 +29,7 @@
 #include <SFML/Window.hpp>
 
 #include <pscruft.hpp>
+#include <psikm.hpp>
 #include <ps_b1.h>
 
 #define PS_MAX(a, b) ((a) > (b)) ? (a) : (b))
@@ -49,8 +50,6 @@
 #define PS_BONE_UNIFORM_MAX 64
 
 #define PS_ALIGNME(ELTNO, TYPE) _alignme((ELTNO) * sizeof(TYPE), ps_g_ubo_algn)
-
-const double PS_PI = 3.14159265358979323846;
 
 // https://eigen.tuxfamily.org/dox/group__TutorialGeometry.html
 //   If you are working with OpenGL 4x4 matrices then Affine3f and Affine3d are what you want.
@@ -91,20 +90,12 @@ const double PS_PI = 3.14159265358979323846;
 // glslspec46 @ 4.1.14. Implicit Conversions :
 //   Note conversions defined follow DAG signed->unsigned->float->double
 
-namespace ei = ::Eigen;
-
 template<typename T>
 using sp = ::std::shared_ptr<T>;
 
 using st = size_t;
 
 using weit_t = std::tuple<std::string, float>;
-
-using A3f = ::ei::Transform<float, 3, ei::Affine, ei::DontAlign>;
-using M4f = ::ei::Matrix<float, 4, 4, ei::DontAlign>;
-using Mp4f = ::ei::Map<::ei::Matrix<float, 4, 4, ei::DontAlign> >;
-using V3f = ::ei::Matrix<float, 3, 1, ei::DontAlign>;
-using Qf = ::ei::Quaternion<float, ei::DontAlign>;
 
 typedef std::function<void(uint8_t *, const std::string &)> fconv_t;
 
@@ -903,6 +894,9 @@ void main()
 			glDeleteSync(sync);
 			sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
 		}
+		win.pushGLStates();
+		ikmex(win);
+		win.popGLStates();
 		win.display();
 	}
 end:
