@@ -78,7 +78,10 @@ ikdraw(sf::RenderWindow &win, const IkmChin &chin)
 {
 	A2f a(A2f::Identity());
 	for (size_t i = 0; i < chin.m_chin.size(); i++) {
+		const V2f &old_(a * V2f(0, 0));
 		a = a * chin.m_chin[i].m_m;
+		const V2f &new_(a * V2f(0, 0));
+		ikdrawline(win, old_, new_, (old_ - new_).norm(), sf::Color(0, 128, 255));
 		ikdraw1(win, a);
 	}
 }
