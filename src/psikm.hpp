@@ -52,21 +52,25 @@ public:
 };
 
 inline void
-ikdraw1(sf::RenderWindow &win, const A2f &acum, const float &len = 20.f, const sf::Color & colr0 = sf::Color(255, 0, 0), const sf::Color & colr1 = sf::Color(0, 255, 0))
+ikdrawline(sf::RenderWindow &win, const V2f &ls, const V2f &le, const float &len, const sf::Color &colr)
 {
-	const sf::Vector2u s(win.getSize());
+	const sf::Vector2u &s(win.getSize());
+	sf::Vertex v[2];
+	v[0].color = colr;
+	v[1].color = colr;
+	v[0].position = sf::Vector2f(ls.x(), s.y - ls.y());
+	v[1].position = sf::Vector2f(le.x(), s.y - le.y());
+	win.draw(v, sizeof v / sizeof * v, sf::Lines);
+}
+
+inline void
+ikdraw1(sf::RenderWindow &win, const A2f &acum, const float &len = 20.f, const sf::Color &colr0 = sf::Color(255, 0, 0), const sf::Color &colr1 = sf::Color(0, 255, 0))
+{
+	const float &le_ = len / 7.f;
 	const V2f ls_(.0f, .0f), le1_(len, .0f), le2_(.0f, len);
 	const V2f ls(acum * ls_), le1(acum * le1_), le2(acum * le2_);
-	sf::Vertex v[4];
-	v[0].color = colr0;
-	v[1].color = colr0;
-	v[2].color = colr1;
-	v[3].color = colr1;
-	v[0].position = sf::Vector2f(ls.x(), s.y - ls.y());
-	v[1].position = sf::Vector2f(le1.x(), s.y - le1.y());
-	v[2].position = sf::Vector2f(ls.x(), s.y - ls.y());
-	v[3].position = sf::Vector2f(le2.x(), s.y - le2.y());
-	win.draw(v, sizeof v / sizeof *v, sf::Lines);
+	ikdrawline(win, ls, le1, len, colr0);
+	ikdrawline(win, ls, le2, len, colr1);
 }
 
 inline void
