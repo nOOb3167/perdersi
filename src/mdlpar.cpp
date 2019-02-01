@@ -89,6 +89,9 @@
 //   Verbiage implies commands need match types for values to be taken.
 // glslspec46 @ 4.1.14. Implicit Conversions :
 //   Note conversions defined follow DAG signed->unsigned->float->double
+// https://github.com/eigenteam/eigen-git-mirror/blob/master/test/geo_transformations.cpp#L258
+//   'check that Transform product doesn't have aliasing problems'
+//   Eigen3 Transform seemingly guarantees 'T = T * U' style self-assignment works
 
 template<typename T>
 using sp = ::std::shared_ptr<T>;

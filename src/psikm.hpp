@@ -21,7 +21,6 @@ using V2f = ::ei::Matrix<float, 2, 1, ei::DontAlign>;
 using V3f = ::ei::Matrix<float, 3, 1, ei::DontAlign>;
 using V4f = ::ei::Matrix<float, 4, 1, ei::DontAlign>;
 using Qf = ::ei::Quaternion<float, ei::DontAlign>;
-using Aa = ::ei::AngleAxisf;
 
 class IkmBone
 {
@@ -53,22 +52,26 @@ public:
 };
 
 inline void
+ikdraw1(sf::RenderWindow &win, const A2f &acum, const sf::Color &colr0 = sf::Color(255, 0, 0), const sf::Color &colr1 = sf::Color(0, 0, 255))
+{
+	const V2f ls(.0f, .0f), le(200.f, .0f);
+	const V2f ls_(acum * ls);
+	const V2f le_(acum * le);
+	sf::Vertex v[2];
+	v[0].color = colr0;
+	v[1].color = colr0;
+	v[0].position = sf::Vector2f(ls_.x(), ls_.y());
+	v[1].position = sf::Vector2f(le_.x(), le_.y());
+	win.draw(v, 2, sf::Lines);
+}
+
+inline void
 ikdraw(sf::RenderWindow &win, const IkmChin &chin)
 {
-	ei::Transform<float, 2, ei::Affine> a(A2f::Identity());
+	A2f a(A2f::Identity());
 	for (size_t i = 0; i < chin.m_chin.size(); i++) {
-		auto& ikb = chin.m_chin[i];
-		ei::Transform<float, 2, ei::Affine> tmp(a * ikb.m_m);
-		a = tmp;
-		V2f ls(.0f, .0f), le(200.f, .0f);
-		ls = (a * ls).eval();
-		le = (a * le).eval();
-		sf::Vertex v[2];
-		v[0].color = sf::Color(255, 0, 0);
-		v[1].color = sf::Color(255, 0, 0);
-		v[0].position = sf::Vector2f(ls.x(), ls.y());
-		v[1].position = sf::Vector2f(le.x(), le.y());
-		win.draw(v, 2, sf::Lines);
+		a = a * chin.m_chin[i].m_m;
+		ikdraw1(win, a);
 	}
 }
 
