@@ -1,6 +1,8 @@
 #ifndef _PSIKM_HPP_
 #define _PSIKM_HPP_
 
+#include <deque>
+#include <limits>
 #include <map>
 #include <vector>
 
@@ -10,6 +12,7 @@
 #include <SFML/Window.hpp>
 
 const double PS_PI = 3.14159265358979323846;
+const float PS_IK_INCR = (float)(PS_PI) * 2.f / 16.f;
 
 namespace ei = ::Eigen;
 
@@ -49,7 +52,90 @@ class IkmChin
 {
 public:
 	std::vector<IkmBone> m_chin;
+
+	inline void
+	_state_from(const size_t cnt_old, const size_t cnt_cur)
+	{
+		const size_t fnum = m_chin.size();
+		// TODO: if last ikmbone is rotation only we can skip it (j < fnum - 1)
+		for (size_t j = 0; j < fnum; j++) {
+			const size_t xold = (cnt_old >> (j * 4)) & 0x0F;
+			const size_t xnew = (cnt_cur >> (j * 4)) & 0x0F;
+			if (xold == xnew)
+				continue;
+			m_chin[j].m_d.z() = PS_IK_INCR * xnew;
+			m_chin[j]._refresh();
+		}
+	}
 };
+
+inline V2f
+iktip(const IkmChin &chin)
+{
+	A2f a(A2f::Identity());
+	for (size_t i = 0; i < chin.m_chin.size(); i++)
+		a = a * chin.m_chin[i].m_m;
+	return a * V2f(0, 0);
+}
+
+inline void
+iktrgt_rec(const V2f &trgt, size_t x, IkmChin &chin, IkmChin &min_chin, float &min_diff)
+{
+	if (x < chin.m_chin.size()) {
+		auto &b = chin.m_chin[x];
+		const float oldz = b.m_d.z();
+		for (float i = 0; i < 2 * PS_PI; (i += PS_IK_INCR)) {
+			b.m_d.z() = i;
+			b._refresh();
+			iktrgt_rec(trgt, x + 1, chin, min_chin, min_diff);
+		}
+		b.m_d.z() = oldz;
+	}
+	else {
+		const V2f btip(iktip(chin));
+		const float diff((trgt - btip).norm());
+		if (diff < min_diff) {
+			min_chin = chin;
+			min_diff = diff;
+		}
+	}
+}
+
+inline IkmChin
+iktrgt(const IkmChin &chin_, const V2f &trgt)
+{
+	IkmChin chin(chin_), min_chin(chin_);
+	float min_diff = (trgt - iktip(min_chin)).norm();
+	iktrgt_rec(trgt, 0, chin, min_chin, min_diff);
+	return min_chin;
+}
+
+inline IkmChin
+iktrgt2(const IkmChin &chin_, const V2f &trgt)
+{
+	IkmChin chin(chin_);
+	float dif_min = std::numeric_limits<float>::infinity();
+	size_t cnt_min = 0;
+
+	assert((chin.m_chin.size() * 4) < 32);
+
+	const size_t cnt_num = chin.m_chin.size() << 4;
+	size_t cnt_old = 0;
+
+	for (size_t i = 0; i < cnt_num; (cnt_old = i, i++)) {
+		chin._state_from(cnt_old, i);
+		const V2f btip(iktip(chin));
+		const float dif((trgt - btip).norm());
+		if (dif < dif_min) {
+			cnt_min = i;
+			dif_min = dif;
+		}
+	}
+
+	chin._state_from(~cnt_min, cnt_min);
+
+	return chin;
+}
 
 inline void
 ikdrawline(sf::RenderWindow &win, const V2f &ls, const V2f &le, const float &len, const sf::Color &colr)
@@ -92,7 +178,9 @@ ikmex(sf::RenderWindow &win)
 	IkmChin chin;
 	chin.m_chin.push_back(IkmBone(0, 0, PS_PI / 4, 1));
 	chin.m_chin.push_back(IkmBone(200, 0, PS_PI / 2, 1));
+	chin.m_chin.push_back(IkmBone(200, 0, 0, 1));
 	ikdraw(win, chin);
+	ikdraw(win, iktrgt2(chin, V2f(350, 350)));
 }
 
 #endif /* _PSIKM_HPP_ */
