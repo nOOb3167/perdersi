@@ -58,7 +58,7 @@ public:
 	{
 		const size_t fnum = m_chin.size();
 		// TODO: if last ikmbone is rotation only we can skip it (j < fnum - 1)
-		for (size_t j = 0; j < fnum; j++) {
+		for (size_t j = 0; j < (fnum - 1); j++) {
 			const size_t xold = (cnt_old >> (j * 4)) & 0x0F;
 			const size_t xnew = (cnt_cur >> (j * 4)) & 0x0F;
 			if (xold == xnew)
@@ -85,9 +85,9 @@ iktrgt(const IkmChin &chin_, const V2f &trgt)
 	float dif_min = std::numeric_limits<float>::infinity();
 	size_t cnt_min = 0;
 
-	assert((chin.m_chin.size() * 4) < 32);
-
-	const size_t cnt_num = chin.m_chin.size() << 4;
+	assert(((chin.m_chin.size() - 1) * 4) < 32);
+	// TODO: if last ikmbone is rotation only we can skip it (j < fnum - 1)
+	const size_t cnt_num = 1 << (4 * (chin.m_chin.size() - 1));
 	size_t cnt_old = 0;
 
 	for (size_t i = 0; i < cnt_num; (cnt_old = i, i++)) {
@@ -144,9 +144,9 @@ inline void
 ikmex(sf::RenderWindow &win)
 {
 	IkmChin chin;
-	chin.m_chin.push_back(IkmBone(0, 0, PS_PI / 4, 1));
+	chin.m_chin.push_back(IkmBone(200, 0, PS_PI / 4, 1));
 	chin.m_chin.push_back(IkmBone(200, 0, PS_PI / 2, 1));
-	chin.m_chin.push_back(IkmBone(200, 0, 0, 1));
+	chin.m_chin.push_back(IkmBone(50, 0, 0, 1));
 	ikdraw(win, chin);
 	auto &v2i = sf::Mouse::getPosition(win);
 	auto &v2u = win.getSize();
