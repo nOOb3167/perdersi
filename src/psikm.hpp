@@ -78,40 +78,8 @@ iktip(const IkmChin &chin)
 	return a * V2f(0, 0);
 }
 
-inline void
-iktrgt_rec(const V2f &trgt, size_t x, IkmChin &chin, IkmChin &min_chin, float &min_diff)
-{
-	if (x < chin.m_chin.size()) {
-		auto &b = chin.m_chin[x];
-		const float oldz = b.m_d.z();
-		for (float i = 0; i < 2 * PS_PI; (i += PS_IK_INCR)) {
-			b.m_d.z() = i;
-			b._refresh();
-			iktrgt_rec(trgt, x + 1, chin, min_chin, min_diff);
-		}
-		b.m_d.z() = oldz;
-	}
-	else {
-		const V2f btip(iktip(chin));
-		const float diff((trgt - btip).norm());
-		if (diff < min_diff) {
-			min_chin = chin;
-			min_diff = diff;
-		}
-	}
-}
-
 inline IkmChin
 iktrgt(const IkmChin &chin_, const V2f &trgt)
-{
-	IkmChin chin(chin_), min_chin(chin_);
-	float min_diff = (trgt - iktip(min_chin)).norm();
-	iktrgt_rec(trgt, 0, chin, min_chin, min_diff);
-	return min_chin;
-}
-
-inline IkmChin
-iktrgt2(const IkmChin &chin_, const V2f &trgt)
 {
 	IkmChin chin(chin_);
 	float dif_min = std::numeric_limits<float>::infinity();
@@ -180,7 +148,9 @@ ikmex(sf::RenderWindow &win)
 	chin.m_chin.push_back(IkmBone(200, 0, PS_PI / 2, 1));
 	chin.m_chin.push_back(IkmBone(200, 0, 0, 1));
 	ikdraw(win, chin);
-	ikdraw(win, iktrgt2(chin, V2f(350, 350)));
+	auto &v2i = sf::Mouse::getPosition(win);
+	auto &v2u = win.getSize();
+	ikdraw(win, iktrgt(chin, V2f(v2i.x, v2u.y - v2i.y)));
 }
 
 #endif /* _PSIKM_HPP_ */
