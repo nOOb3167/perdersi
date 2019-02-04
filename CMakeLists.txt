@@ -80,6 +80,7 @@ set(SFML_STATIC_LIBRARIES ON)
 find_package(SFML CONFIG COMPONENTS graphics system window REQUIRED)
 find_package(Inkscape REQUIRED)
 find_package(Eigen3 CONFIG COMPONENTS Eigen3::Eigen REQUIRED)
+find_package(NLopt CONFIG REQUIRED)
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -91,6 +92,7 @@ target_link_libraries(common PUBLIC
 	Threads::Threads LibGit2::LibGit2 $<$<STREQUAL:$<CXX_COMPILER_ID>,MSVC>:winhttp Rpcrt4 crypt32>
 	sfml-graphics sfml-system sfml-window
 	Eigen3::Eigen
+	NLopt::nlopt
 )
 target_compile_definitions(common PUBLIC _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS _CRT_SECURE_NO_WARNINGS _WIN32_WINNT=0x0601 GLEW_STATIC)
 target_include_directories(common PUBLIC ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/miniz ${CMAKE_SOURCE_DIR}/src/GL)

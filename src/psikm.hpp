@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <Eigen/Dense>
+#include <nlopt.hpp>
 #include <SFML/Graphics.hpp>
 #include <SFML/OpenGL.hpp>
 #include <SFML/Window.hpp>
@@ -67,6 +68,17 @@ public:
 			m_chin[j]._refresh();
 		}
 	}
+
+	inline void
+	_state_from_x(size_t n, const double *x)
+	{
+		// TODO: if last ikmbone is rotation only we can skip it (j < fnum - 1)
+		assert(n == m_chin.size() - 1);
+		for (size_t j = 0; j < n; j++) {
+			(m_chin.data() + j)->m_d.z() = x[j];
+			(m_chin.data() + j)->_refresh();
+		}
+	}
 };
 
 inline V2f
@@ -102,6 +114,44 @@ iktrgt(const IkmChin &chin_, const V2f &trgt)
 
 	chin._state_from(~cnt_min, cnt_min);
 
+	return chin;
+}
+
+class IkmNloptCtx
+{
+public:
+	IkmChin *m_chin;
+	V2f m_trgt;
+};
+
+inline double
+ik_nlopt_func(unsigned n, const double *x, double *gradient, void *func_data)
+{
+	IkmNloptCtx *ctx = static_cast<IkmNloptCtx *>(func_data);
+	// TODO: if last ikmbone is rotation only we can skip it (j < fnum - 1)
+	assert(n == ctx->m_chin->m_chin.size() - 1 && !gradient);
+	ctx->m_chin->_state_from_x(n, x);
+	const double r = (ctx->m_trgt - iktip(*ctx->m_chin)).norm();
+	return r;
+}
+
+inline IkmChin
+iktrgt2(const IkmChin &chin_, const V2f &trgt)
+{
+	IkmChin chin(chin_);
+	// TODO: if last ikmbone is rotation only we can skip it (j < fnum - 1)
+	nlopt::opt opt(nlopt::LN_COBYLA, chin.m_chin.size() - 1);
+	const std::vector<double> lb(chin.m_chin.size() - 1, .0);
+	const std::vector<double> ub(chin.m_chin.size() - 1, 2. * PS_PI);
+	opt.set_lower_bounds(lb);
+	opt.set_upper_bounds(ub);
+	IkmNloptCtx ctx; ctx.m_chin = &chin; ctx.m_trgt = trgt;
+	opt.set_min_objective(ik_nlopt_func, &ctx);
+	opt.set_maxeval(256);
+	std::vector<double> ig(chin.m_chin.size() - 1, .0);
+	double rval = .0;
+	nlopt::result res = opt.optimize(ig, rval);
+	chin._state_from_x(ig.size(), ig.data());
 	return chin;
 }
 
@@ -150,7 +200,7 @@ ikmex(sf::RenderWindow &win)
 	ikdraw(win, chin);
 	auto &v2i = sf::Mouse::getPosition(win);
 	auto &v2u = win.getSize();
-	ikdraw(win, iktrgt(chin, V2f(v2i.x, v2u.y - v2i.y)));
+	ikdraw(win, iktrgt2(chin, V2f(v2i.x, v2u.y - v2i.y)));
 }
 
 #endif /* _PSIKM_HPP_ */
