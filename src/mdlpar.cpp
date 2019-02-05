@@ -241,25 +241,6 @@ public:
 	GLuint m_buf = 0;
 };
 
-class PaUvLa
-{
-public:
-	inline PaUvLa(const std::string &name, const std::vector<float> &layr) :
-		m_name(name),
-		m_layr(layr)
-	{}
-
-	std::string m_name;
-	std::vector<float> m_layr;
-};
-
-class PaWeit
-{
-public:
-	std::vector<uint32_t> m_id;
-	std::vector<float> m_wt;
-};
-
 #pragma pack (push, 1)
 class GxVert
 {
