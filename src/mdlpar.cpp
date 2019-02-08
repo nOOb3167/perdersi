@@ -700,7 +700,7 @@ M4f _lookat(const V3f &eye, const V3f &cen, const V3f &up)
 
 void stuff()
 {
-	sp<Pa> pars(new Pa(std::string((char *)g_ps_b1, g_ps_b1_size)));
+	sp<Pa> pa(new Pa(std::string((char *)g_ps_b1, g_ps_b1_size)));
 
 	sf::ContextSettings ctx(24);
 	sf::RenderWindow win(sf::VideoMode(800, 600), "", sf::Style::Default, ctx);
@@ -797,8 +797,8 @@ void main()
 
 	GLsync sync = 0;
 
-	sp<GxModl> modl(new GxModl(pars));
-	sp<GxActn> actn(new GxActn(pars));
+	sp<GxModl> modl(new GxModl(pa));
+	sp<GxActn> actn(new GxActn(pa));
 
 	glCreateBuffers(GLsizei(vbo.size()), vbo.data());
 	glNamedBufferStorage(vbo[0], sizeof colr, nullptr, PS_GLSYNC_FLAGS);
@@ -871,7 +871,7 @@ void main()
 
 			sf::Shader::bind(&sha);
 			glBindVertexArray(vao);
-			glDrawArrays(GL_TRIANGLES, 0, GLsizei(pars->m_modl->m_data.size()));
+			glDrawArrays(GL_TRIANGLES, 0, GLsizei(pa->m_modl->m_data.size()));
 			glBindVertexArray(0);
 			sf::Shader::bind(nullptr);
 
