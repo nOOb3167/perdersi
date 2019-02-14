@@ -39,10 +39,10 @@ class MeOb:
     m_armo: bpy.types.Object
     
     @classmethod
-    def meob(klass, mesh: bpy.types.Mesh):
-        meso: bpy.types.Object = bpy.data.objects[mesh.name]
-        armt: bpy.types.Armature = bpy.data.armatures[0]
-        armo: bpy.types.Object = bpy.data.objects[armt.name]
+    def meob(klass, meso: bpy.types.Object, armo: bpy.types.Object):
+        assert meso.type == 'MESH' and armo.type == 'ARMATURE'
+        mesh: bpy.types.Mesh = meso.data
+        armt: bpy.types.Armature = armo.data
         meob: MeOb = MeOb(m_mesh=mesh, m_meso=meso, m_armt=armt, m_armo=armo)
         meob.m_mesh.calc_loop_triangles() # FIXME: loop_triangles not used anymore
         return meob
@@ -129,7 +129,10 @@ def _actn(d: dict, meob: MeOb):
 
 def _run():
     d = {'modl':{}, 'armt':{}, 'actn':{}}
-    meob: MeOb = MeOb.meob(bpy.data.meshes[0])
+    meso: typing.List[bpy.types.Object] = [o for o in bpy.data.objects if o.type == 'MESH']
+    armo: typing.List[bpy.types.Object] = [o for o in bpy.data.objects if o.type == 'ARMATURE']
+    assert len(meso) == 1 and len(armo) == 1
+    meob: MeOb = MeOb.meob(meso[0], armo[0])
     _modl(d, meob)
     with WithPose(meob.m_armt, 'REST'):
         _armt(d, meob)
