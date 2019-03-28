@@ -1,10 +1,7 @@
 #ifndef _PSIKM_HPP_
 #define _PSIKM_HPP_
 
-#include <deque>
-#include <limits>
-#include <map>
-#include <vector>
+#include <pch1.h>
 
 #include <Eigen/Dense>
 #include <nlopt.hpp>

@@ -35,3 +35,18 @@ function(PS_UTIL_CONVERT_SVG_PNG FNAME PNGNAME)
         DEPENDS ${FNAME}
     )
 endfunction()
+
+function(PS_UTIL_PCHIZE)
+	cmake_parse_arguments(PARSE_ARGV 0 A "" TARGET "PCHBASNAM;CXXSOURCES")
+	if(A_UNPARSED_ARGUMENTS)
+		message(FATAL_ERROR)
+	endif()
+	if(MSVC)
+		cmake_policy(PUSH)
+		cmake_policy(SET CMP0076 NEW) # target_sources relative paths
+		target_sources(${A_TARGET} PUBLIC src/${A_PCHBASNAM}.cpp src/${A_PCHBASNAM}.h)
+		cmake_policy(POP)
+		set_source_files_properties(src/${A_PCHBASNAM}.cpp PROPERTIES COMPILE_FLAGS /Yc${A_PCHBASNAM}.h OBJECT_OUTPUTS ${CMAKE_BINARY_DIR}/${A_PCHBASNAM}.pch)
+		set_source_files_properties(${A_CXXSOURCES} PROPERTIES COMPILE_FLAGS /Yu${A_PCHBASNAM}.h OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/${A_PCHBASNAM}.pch)
+	endif()
+endfunction()

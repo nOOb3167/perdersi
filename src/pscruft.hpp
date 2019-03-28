@@ -1,19 +1,8 @@
 #ifndef _PS_CRUFT_HPP_
 #define _PS_CRUFT_HPP_
 
-#include <fstream>
-#include <iostream>
-#include <sstream>
-#include <string>
-#include <stdexcept>
-#include <vector>
+#include <pch1.h>
 
-#include <boost/filesystem.hpp>
-#include <boost/property_tree/json_parser.hpp>
-#include <boost/regex.hpp>
-#include <chrono>
-
-#include <psasio.hpp>
 #include <ps_config_updater.h>
 
 using pt_t = ::boost::property_tree::ptree;

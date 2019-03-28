@@ -115,6 +115,7 @@ target_compile_definitions(tupdater3 PUBLIC _PS_DEBUG_TUPDATER=3)
 
 add_executable(mdlpar ${PS_RCS} src/mdlpar.cpp ps_b1.h)
 target_link_libraries(mdlpar PUBLIC common)
+PS_UTIL_PCHIZE(TARGET mdlpar PCHBASNAM pch1 CXXSOURCES src/mdlpar.cpp)
 
 find_package(Python3 REQUIRED)
 set(PYPATH "PYTHONPATH=${CMAKE_BINARY_DIR}${SEP}${CMAKE_SOURCE_DIR}/files")

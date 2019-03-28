@@ -1,27 +1,5 @@
-#include <cassert>
-#include <cmath>
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <chrono>
-#include <algorithm>
-#include <deque>
-#include <functional>
-#include <map>
-#include <memory>
-#include <sstream>
-#include <stdexcept>
-#include <string>
-#include <thread>
-#include <tuple>
-#include <type_traits>
-#include <utility>
+#include <pch1.h>
 
-// GRRR
-#include <psasio.hpp>
-
-#include <boost/regex.hpp>
 #include <Eigen/Dense>
 #include <GL/glew.h>
 #include <SFML/Graphics.hpp>
